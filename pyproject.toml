@@ -5,3 +5,15 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = []
+
+[dependency-groups]
+dev = ["lefthook", "ruff", "ty"]
+
+[tool.ruff]
+fix = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.ty]
+# ty doesn't currently support an autofix option
