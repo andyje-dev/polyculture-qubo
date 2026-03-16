@@ -159,10 +159,20 @@ def filter_to_candidate_pairs(df: pd.DataFrame) -> pd.DataFrame:
     return df[mask].copy()
 
 
-def compute_pairwise_ler_stats(df: pd.DataFrame) -> pd.DataFrame:
+def compute_pairwise_ler_stats(
+    df: pd.DataFrame,
+    ler_cap: float = 3.0,
+) -> pd.DataFrame:
     """Compute pairwise LER statistics from filtered Paut data.
 
     Takes output of filter_to_candidate_pairs(load_paut_dataset()).
+
+    Args:
+        df: Filtered DataFrame with ler_total, crop_1, crop_2, article_id columns.
+        ler_cap: Maximum credible LER value. Observations above this are
+            winsorized (capped) to reduce influence of outliers from extreme
+            experimental conditions. Default 3.0 based on meta-analysis norms.
+
     Returns DataFrame with one row per species pair and columns:
         species_a, species_b: canonical keys (alphabetically ordered)
         ler_mean: mean LER across observations
@@ -173,6 +183,9 @@ def compute_pairwise_ler_stats(df: pd.DataFrame) -> pd.DataFrame:
         pct_above_1: fraction of observations with LER > 1.0
     """
     filtered = df.dropna(subset=["ler_total"]).copy()
+
+    # Winsorize extreme LER values
+    filtered["ler_total"] = filtered["ler_total"].clip(upper=ler_cap)
 
     # Normalize pair ordering (alphabetical) so (A,B) == (B,A)
     pairs = pd.DataFrame(

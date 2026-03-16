@@ -169,16 +169,20 @@ def _apply_companion_prior(
     weight: float,
 ) -> None:
     """Apply companion planting data as a weak prior to the interaction matrix."""
-    # Aggregate companion interactions per pair
-    valid = companion_data.dropna(subset=["crop_1", "crop_2", "interaction"])
+    valid = companion_data.dropna(subset=["crop_1", "crop_2", "interaction"]).copy()
 
-    for (c1, c2), group in valid.groupby(["crop_1", "crop_2"]):
-        if c1 not in key_to_idx or c2 not in key_to_idx:
+    # Normalize to undirected pairs (alphabetical order) before aggregating,
+    # so (maize, bean) and (bean, maize) are treated as the same pair.
+    valid["species_a"] = np.minimum(valid["crop_1"], valid["crop_2"])
+    valid["species_b"] = np.maximum(valid["crop_1"], valid["crop_2"])
+
+    for (a, b), group in valid.groupby(["species_a", "species_b"]):
+        if a not in key_to_idx or b not in key_to_idx:
             continue
-        if c1 == c2:
+        if a == b:
             continue
 
-        i, j = key_to_idx[c1], key_to_idx[c2]
+        i, j = key_to_idx[a], key_to_idx[b]
         mean_interaction = group["interaction"].mean()
 
         # Only apply as prior if we haven't seen LER data for this pair
@@ -192,13 +196,12 @@ def _apply_companion_prior(
 def compute_linear_biases(
     species_keys: list[str] | None = None,
     yield_weight: float = 0.3,
-    nfix_weight: float = 0.2,
 ) -> dict[str, float]:
     """Compute linear bias h_i for each species.
 
-    Encodes individual species value:
-      - Base value proportional to economic importance (simplified)
-      - Nitrogen fixation bonus for legumes
+    Encodes individual species value based on economic importance.
+    N-fixation is handled separately as a pairwise term in the QUBO
+    (fixer + non-fixer pairs get a bonus).
     """
     if species_keys is None:
         species_keys = sorted(CANDIDATE_SPECIES.keys())
@@ -206,10 +209,7 @@ def compute_linear_biases(
     biases: dict[str, float] = {}
     for key in species_keys:
         sp = CANDIDATE_SPECIES[key]
-        h = yield_weight * (1.0 if sp.is_cash_crop else 0.3)
-        if sp.is_nitrogen_fixer:
-            h += nfix_weight
-        biases[key] = h
+        biases[key] = yield_weight * (1.0 if sp.is_cash_crop else 0.3)
 
     return biases
 

@@ -173,10 +173,10 @@ class TestLinearBiases:
         # Cash crop should have higher bias than non-cash crop
         assert biases["maize"] > biases["crimson_clover"]
 
-    def test_nitrogen_fixer_bonus(self):
+    def test_cash_crops_equal(self):
         biases = compute_linear_biases()
-        # Cowpea (legume + cash) vs Wheat (cereal + cash, no N-fix)
-        assert biases["cowpea"] > biases["wheat"]
+        # N-fixation no longer in linear biases — all cash crops equal
+        assert biases["cowpea"] == biases["wheat"]
 
 
 @SKIP_NO_DATA
