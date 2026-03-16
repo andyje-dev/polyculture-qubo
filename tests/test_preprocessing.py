@@ -6,15 +6,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from regen_qubo.species import CANDIDATE_SPECIES, normalize_species_name
-from regen_qubo.data_loader import (
+from polyculture_qubo.species import CANDIDATE_SPECIES, normalize_species_name
+from polyculture_qubo.data import (
     aggregate_bischoff_pairs,
     compute_pairwise_ler_stats,
     filter_to_candidate_pairs,
     load_bischoff_pairs,
     load_paut_dataset,
 )
-from regen_qubo.interaction_matrix import (
+from polyculture_qubo.matrix import (
     build_diversity_matrix,
     build_interaction_matrix,
     compute_confidence_weight,

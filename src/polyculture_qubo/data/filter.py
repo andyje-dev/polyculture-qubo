@@ -6,7 +6,7 @@ species with ≥3 pairwise interaction observations in the combined dataset."
 
 import pandas as pd
 
-from regen_qubo.species import CANDIDATE_SPECIES
+from polyculture_qubo.species import CANDIDATE_SPECIES
 
 
 def filter_species_by_coverage(

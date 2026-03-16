@@ -1,12 +1,12 @@
 """Main preprocessing pipeline: raw data → interaction matrices → saved outputs.
 
-Run as: python -m regen_qubo.preprocessing
+Run as: python -m polyculture_qubo.pipeline
 """
 
 import numpy as np
 import pandas as pd
 
-from regen_qubo.data_loader import (
+from polyculture_qubo.data import (
     RAW_DIR,
     PROCESSED_DIR,
     aggregate_bischoff_pairs,
@@ -16,12 +16,12 @@ from regen_qubo.data_loader import (
     load_companion_plants,
     load_paut_dataset,
 )
-from regen_qubo.interaction_matrix import (
+from polyculture_qubo.matrix import (
     build_diversity_matrix,
     build_interaction_matrix,
     compute_linear_biases,
 )
-from regen_qubo.species import CANDIDATE_SPECIES
+from polyculture_qubo.species import CANDIDATE_SPECIES
 
 
 def run_pipeline() -> dict[str, pd.DataFrame]:

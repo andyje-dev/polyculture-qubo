@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from regen_qubo.qubo import (
+from polyculture_qubo.matrix import (
     QUBOConfig,
     build_nitrogen_matrix,
     build_qubo_matrix,
@@ -14,7 +14,7 @@ from regen_qubo.qubo import (
     qubo_energy,
     solution_to_species,
 )
-from regen_qubo.species import CANDIDATE_SPECIES
+from polyculture_qubo.species import CANDIDATE_SPECIES
 
 PROCESSED_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
 SKIP_NO_DATA = pytest.mark.skipif(

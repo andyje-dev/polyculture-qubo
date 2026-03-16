@@ -28,7 +28,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from regen_qubo.species import CANDIDATE_SPECIES
+from polyculture_qubo.species import CANDIDATE_SPECIES
 
 
 @dataclass
