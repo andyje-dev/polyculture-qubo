@@ -1,13 +1,33 @@
 [project]
 name = "regenerative-agriculture-qubo"
 version = "0.1.0"
-description = "Add your description here"
+description = "Quantum-computational framework for optimizing polyculture species selection in regenerative agriculture"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "networkx",
+    "matplotlib",
+    "seaborn",
+    "requests",
+    "openpyxl",
+    "kaggle",
+]
 
 [dependency-groups]
-dev = ["lefthook", "ruff", "ty"]
+dev = ["lefthook", "pytest", "ruff", "ty"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/regen_qubo"]
 
 [tool.ruff]
 fix = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
