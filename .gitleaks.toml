@@ -1,0 +1,15 @@
+title = "polyculture-qubo gitleaks config"
+
+[extend]
+# Use the default gitleaks rules (API keys, tokens, passwords, etc.)
+# See: https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml
+
+[allowlist]
+# Paths that should never be scanned
+paths = [
+    '''\.venv/''',
+    '''__pycache__/''',
+    '''data/raw/''',
+    '''data/external/''',
+    '''output/''',
+]
