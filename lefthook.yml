@@ -9,3 +9,10 @@ pre-commit:
     typecheck:
       glob: "*.py"
       run: ty check {staged_files}
+
+pre-push:
+  commands:
+    secrets:
+      run: gitleaks detect --source . --log-opts "{push_range}"
+    tests:
+      run: python -m pytest tests/ -x -q
