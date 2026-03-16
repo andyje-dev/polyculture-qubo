@@ -71,4 +71,4 @@ The k=4 optimal solution is **common bean + maize + pea + pepper** -- a cereal-l
 2. **Bischoff et al. (2024)** -- 274 species pairs from PNAS systems agroecology study
 3. **Sula companion planting network** -- 995 signed edges from traditional knowledge
 
-See `CLAUDE.md` for full data source documentation and methodology.
+See [paper/report.md](paper/report.md) for the full technical report with methodology, results, and analysis.
