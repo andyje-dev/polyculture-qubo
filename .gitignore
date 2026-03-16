@@ -41,6 +41,9 @@ data/external/
 *.h5
 *.hdf5
 
+# Generated output (figures, reports)
+output/
+
 # Solver outputs
 *.lp
 *.mps
