@@ -89,12 +89,14 @@ def compute_scalability_metrics(
             cond = float("inf")
         cond_nums.append(cond)
 
-        # Penalty-to-objective ratio: diagonal penalty term vs. max off-diagonal objective
-        diag = np.diag(q)
-        off_diag = np.triu(q, k=1)
-        max_penalty = np.max(off_diag) if off_diag.size > 0 else 0
-        min_objective = np.min(off_diag) if off_diag.size > 0 else 0
-        ratio = max_penalty / abs(min_objective) if min_objective != 0 else float("inf")
+        # Penalty-to-objective ratio: constant penalty offset vs. objective energy range
+        # For feasible solutions, the penalty contributes a constant -k²λ offset.
+        # The objective range is the spread of agronomic signal across solutions.
+        lm = landscape_metrics[k]
+        if lm.obj_range > 0 and lm.penalty_offset != 0:
+            ratio = abs(lm.penalty_offset) / lm.obj_range
+        else:
+            ratio = float("inf")
         penalty_ratios.append(float(ratio))
 
     return ScalabilityMetrics(
@@ -116,22 +118,28 @@ def compute_scalability_metrics(
 def print_scalability_summary(metrics: ScalabilityMetrics) -> None:
     """Print a human-readable scalability analysis."""
     m = metrics
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  SCALABILITY PROJECTION (N = {m.n_species})")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
-    print(f"\n{'k':>3} {'C(N,k)':>8} {'Gap':>10} {'Gap Ratio':>10} "
-          f"{'Deg(1%)':>8} {'Deg(5%)':>8} {'LM Frac':>8} {'Cond#':>10}")
+    print(
+        f"\n{'k':>3} {'C(N,k)':>8} {'Gap':>10} {'Gap Ratio':>10} "
+        f"{'Deg(1%)':>8} {'Deg(5%)':>8} {'LM Frac':>8} {'Cond#':>10}"
+    )
     print("-" * 70)
     for i, k in enumerate(m.k_values):
-        print(f"{k:>3} {m.solution_space_sizes[i]:>8} "
-              f"{m.spectral_gaps[i]:>10.6f} {m.gap_ratios[i]:>10.6f} "
-              f"{m.degeneracies_1pct[i]:>8} {m.degeneracies_5pct[i]:>8} "
-              f"{m.local_minima_fractions[i]:>8.1%} {m.condition_numbers[i]:>10.1f}")
+        print(
+            f"{k:>3} {m.solution_space_sizes[i]:>8} "
+            f"{m.spectral_gaps[i]:>10.6f} {m.gap_ratios[i]:>10.6f} "
+            f"{m.degeneracies_1pct[i]:>8} {m.degeneracies_5pct[i]:>8} "
+            f"{m.local_minima_fractions[i]:>8.1%} {m.condition_numbers[i]:>10.1f}"
+        )
 
     # Gap trend
     if len(m.spectral_gaps) >= 2:
-        gap_trend = (m.spectral_gaps[-1] - m.spectral_gaps[0]) / (m.k_values[-1] - m.k_values[0])
+        gap_trend = (m.spectral_gaps[-1] - m.spectral_gaps[0]) / (
+            m.k_values[-1] - m.k_values[0]
+        )
         print(f"\n  Gap trend (Δgap/Δk): {gap_trend:.6f}")
         if gap_trend < 0:
             print("  → Gap shrinks with k: problem gets harder at larger scale")
@@ -142,17 +150,25 @@ def print_scalability_summary(metrics: ScalabilityMetrics) -> None:
     if len(m.degeneracies_5pct) >= 2:
         deg_ratio = m.degeneracies_5pct[-1] / max(m.degeneracies_5pct[0], 1)
         space_ratio = m.solution_space_sizes[-1] / max(m.solution_space_sizes[0], 1)
-        print(f"\n  Degeneracy growth: {deg_ratio:.1f}x (solution space grew {space_ratio:.1f}x)")
+        print(
+            f"\n  Degeneracy growth: {deg_ratio:.1f}x (solution space grew {space_ratio:.1f}x)"
+        )
         if deg_ratio > space_ratio:
-            print("  → Degeneracy grows faster than solution space: increasingly flat landscape")
+            print(
+                "  → Degeneracy grows faster than solution space: increasingly flat landscape"
+            )
         else:
-            print("  → Degeneracy grows slower than solution space: landscape differentiates")
+            print(
+                "  → Degeneracy grows slower than solution space: landscape differentiates"
+            )
 
     # QAOA results
     if m.qaoa_approx_ratios:
-        print(f"\n  QAOA Approximation Ratios:")
-        depths = sorted(set(d for ratios in m.qaoa_approx_ratios.values() for d in ratios))
-        header = f"  {'k':>3}" + "".join(f"  {'p='+str(d):>8}" for d in depths)
+        print("\n  QAOA Approximation Ratios:")
+        depths = sorted(
+            set(d for ratios in m.qaoa_approx_ratios.values() for d in ratios)
+        )
+        header = f"  {'k':>3}" + "".join(f"  {'p=' + str(d):>8}" for d in depths)
         print(header)
         for k in m.k_values:
             if k in m.qaoa_approx_ratios:
@@ -164,10 +180,12 @@ def print_scalability_summary(metrics: ScalabilityMetrics) -> None:
                         row += f"  {'—':>8}"
                 print(row)
 
-    print(f"\n  Quantum advantage assessment:")
+    print("\n  Quantum advantage assessment:")
     print(f"    At N={m.n_species}, brute force enumerates all solutions in <1s.")
-    print(f"    Classical solvers (SA) find exact optimum reliably.")
-    if all(r > 0.99 for ratios in m.qaoa_approx_ratios.values() for r in ratios.values()):
-        print(f"    QAOA achieves >99% approximation — problem is easy for all methods.")
+    print("    Classical solvers (SA) find exact optimum reliably.")
+    if all(
+        r > 0.99 for ratios in m.qaoa_approx_ratios.values() for r in ratios.values()
+    ):
+        print("    QAOA achieves >99% approximation — problem is easy for all methods.")
     print(f"    Quantum advantage would require N >> {m.n_species} with maintained")
-    print(f"    problem structure (small gap, high degeneracy, frustrated couplings).")
+    print("    problem structure (small gap, high degeneracy, frustrated couplings).")

@@ -79,7 +79,9 @@ def load_companion_plants(path: Path | None = None) -> pd.DataFrame:
     df = pd.read_csv(path)
 
     # Normalize column names (dataset uses 'Source Node', 'Destination Node', 'Link')
-    source_col = [c for c in df.columns if "source" in c.lower() and "prop" not in c.lower()][0]
+    source_col = [
+        c for c in df.columns if "source" in c.lower() and "prop" not in c.lower()
+    ][0]
     dest_col = [c for c in df.columns if "dest" in c.lower()][0]
     link_col = [c for c in df.columns if "link" in c.lower()][0]
 
@@ -214,11 +216,12 @@ def compute_pairwise_ler_stats(
         .reset_index()
     )
 
-    # Fill NaN std (single observation) with a high-uncertainty constant.
-    # Using median std of other pairs would understate the true uncertainty
-    # for a single data point. A value of 0.5 (~35% coefficient of variation
-    # at typical LER) reflects that we have essentially no information about
-    # the variability of this pair.
-    stats["ler_std"] = stats["ler_std"].fillna(0.5)
+    # Fill NaN std (single observation) with a proportional uncertainty estimate.
+    # For single-observation pairs, std is undefined. We impute ~35% coefficient
+    # of variation (scaled to the pair's mean LER) with a floor of 0.3.
+    # This avoids asymmetric treatment: a pair with LER=2.0 gets std≈0.7 (35% CV)
+    # rather than the fixed 0.5 (25% CV) it would otherwise receive.
+    single_obs_std = np.maximum(0.3, 0.35 * stats["ler_mean"])
+    stats["ler_std"] = stats["ler_std"].fillna(single_obs_std)
 
     return stats.sort_values("n_obs", ascending=False).reset_index(drop=True)

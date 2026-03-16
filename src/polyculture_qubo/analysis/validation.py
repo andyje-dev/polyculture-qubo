@@ -13,13 +13,10 @@ import pandas as pd
 
 from polyculture_qubo.matrix.interaction import (
     build_interaction_matrix,
-    compute_confidence_weight,
-    compute_diversity_bonus,
 )
 from polyculture_qubo.matrix.qubo import (
     QUBOConfig,
     build_qubo_matrix,
-    evaluate_solution,
 )
 from polyculture_qubo.solvers.exact import ExactSolver
 from polyculture_qubo.species import CANDIDATE_SPECIES
@@ -83,19 +80,21 @@ def pairwise_contribution_table(
             n_articles = 0
             data_source = "prior"
 
-        rows.append({
-            "species_a": sp_a,
-            "species_b": sp_b,
-            "j_coefficient": j_val,
-            "confidence": conf,
-            "diversity": div,
-            "n_balance": n_bal,
-            "ler_mean": ler_mean,
-            "ler_std": ler_std,
-            "n_obs": n_obs,
-            "n_articles": n_articles,
-            "data_source": data_source,
-        })
+        rows.append(
+            {
+                "species_a": sp_a,
+                "species_b": sp_b,
+                "j_coefficient": j_val,
+                "confidence": conf,
+                "diversity": div,
+                "n_balance": n_bal,
+                "ler_mean": ler_mean,
+                "ler_std": ler_std,
+                "n_obs": n_obs,
+                "n_articles": n_articles,
+                "data_source": data_source,
+            }
+        )
 
     return pd.DataFrame(rows)
 
@@ -143,18 +142,33 @@ def pairwise_ranking_check(
         rank = np.sum(all_lers <= ler) / n_total
         ranks.append(rank)
 
+    # Permutation test: is the mean selected LER significantly better than random?
+    observed_mean_ler = float(np.mean(selected_lers))
+    n_selected = len(selected_lers)
+    n_permutations = 10_000
+    rng = np.random.default_rng(42)
+    count_as_good = 0
+    for _ in range(n_permutations):
+        sample = rng.choice(all_lers, size=n_selected, replace=False)
+        if np.mean(sample) >= observed_mean_ler:
+            count_as_good += 1
+    p_value = (count_as_good + 1) / (n_permutations + 1)  # +1 for continuity correction
+
     return {
         "n_observed_pairs_in_solution": len(selected_lers),
         "n_total_pairs_in_solution": len(list(combinations(selected_species, 2))),
         "n_total_observed_pairs": n_total,
         "selected_pairs": selected_pairs,
-        "mean_ler_of_selected": float(np.mean(selected_lers)),
+        "mean_ler_of_selected": observed_mean_ler,
         "mean_ler_of_all_observed": float(np.mean(all_lers)),
         "mean_percentile_rank": float(np.mean(ranks)),
-        "individual_ranks": list(zip(
-            [p[0] + "+" + p[1] for p in selected_pairs],
-            [float(r) for r in ranks],
-        )),
+        "permutation_p_value": p_value,
+        "individual_ranks": list(
+            zip(
+                [p[0] + "+" + p[1] for p in selected_pairs],
+                [float(r) for r in ranks],
+            )
+        ),
     }
 
 
@@ -187,9 +201,11 @@ def leave_one_out_cv(
     solution is consistent with its held-out LER value.
 
     A "consistent" result means:
-    - If the pair has high LER (> 1.0), it was in the full solution OR
-      removing it changed the solution (showing the pair matters)
-    - If the pair has low LER (< 1.0), it was NOT in the full solution
+    - High-LER pair (> 1.0): consistent if the pair is selected in the full
+      solution, OR if the pair was selected in the full solution and removing
+      its data changed the solution (demonstrating the pair's importance)
+    - Neutral pair (0.95–1.05): always consistent (no strong signal)
+    - Low-LER pair (< 1.0): consistent if the pair is NOT in the full solution
 
     Args:
         ler_stats: Full pairwise LER statistics.
@@ -200,7 +216,10 @@ def leave_one_out_cv(
     Returns:
         List of LOOResult for each held-out pair.
     """
-    from polyculture_qubo.matrix.interaction import build_diversity_matrix, compute_linear_biases
+    from polyculture_qubo.matrix.interaction import (
+        build_diversity_matrix,
+        compute_linear_biases,
+    )
 
     if config is None:
         config = QUBOConfig()
@@ -211,9 +230,13 @@ def leave_one_out_cv(
     biases_dict = compute_linear_biases()
     biases = pd.DataFrame.from_dict(biases_dict, orient="index", columns=["bias"])
     q_full, species_keys = build_qubo_matrix(j_full, d_matrix, biases, config, c_full)
-    full_result = ExactSolver().solve(q_full, target_species=config.target_species, collect_all=False)
+    full_result = ExactSolver().solve(
+        q_full, target_species=config.target_species, collect_all=False
+    )
     full_selected = set(
-        species_keys[i] for i in range(len(species_keys)) if full_result.best_solution[i] == 1
+        species_keys[i]
+        for i in range(len(species_keys))
+        if full_result.best_solution[i] == 1
     )
 
     results = []
@@ -230,9 +253,13 @@ def leave_one_out_cv(
         # Rebuild with held-out data
         j_loo, c_loo = build_interaction_matrix(ler_loo, companion_data, bischoff_pairs)
         q_loo, _ = build_qubo_matrix(j_loo, d_matrix, biases, config, c_loo)
-        loo_result = ExactSolver().solve(q_loo, target_species=config.target_species, collect_all=False)
+        loo_result = ExactSolver().solve(
+            q_loo, target_species=config.target_species, collect_all=False
+        )
         loo_selected = set(
-            species_keys[i] for i in range(len(species_keys)) if loo_result.best_solution[i] == 1
+            species_keys[i]
+            for i in range(len(species_keys))
+            if loo_result.best_solution[i] == 1
         )
 
         pair_in_full = sp_a in full_selected and sp_b in full_selected
@@ -240,25 +267,30 @@ def leave_one_out_cv(
         ler_val = row["ler_mean"]
 
         # Consistency check
-        if ler_val > 1.0:
-            # High-LER pair: consistent if it was in the full solution
-            # OR if removing it changed the solution
-            consistent = pair_in_full or (full_selected != loo_selected)
+        if 0.95 <= ler_val <= 1.05:
+            # Neutral pair: no strong directional signal, always consistent
+            consistent = True
+        elif ler_val > 1.0:
+            # High-LER pair: consistent if pair is in the full solution,
+            # or if pair was in full solution and its removal mattered
+            consistent = pair_in_full
         else:
             # Low-LER pair: consistent if it was NOT in the full solution
             consistent = not pair_in_full
 
-        results.append(LOOResult(
-            held_out_pair=(sp_a, sp_b),
-            held_out_ler=ler_val,
-            pair_in_full_solution=pair_in_full,
-            pair_in_loo_solution=pair_in_loo,
-            consistent=consistent,
-            full_solution=sorted(full_selected),
-            loo_solution=sorted(loo_selected),
-            full_energy=full_result.best_energy,
-            loo_energy=loo_result.best_energy,
-        ))
+        results.append(
+            LOOResult(
+                held_out_pair=(sp_a, sp_b),
+                held_out_ler=ler_val,
+                pair_in_full_solution=pair_in_full,
+                pair_in_loo_solution=pair_in_loo,
+                consistent=consistent,
+                full_solution=sorted(full_selected),
+                loo_solution=sorted(loo_selected),
+                full_energy=full_result.best_energy,
+                loo_energy=loo_result.best_energy,
+            )
+        )
 
     return results
 
@@ -269,31 +301,46 @@ def print_validation_summary(
     loo_results: list[LOOResult] | None = None,
 ) -> None:
     """Print a human-readable validation summary."""
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("  RETROSPECTIVE VALIDATION")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     print("\n--- Pairwise Contribution Table ---")
     print(contribution_table.to_string(index=False, float_format="%.4f"))
 
     print("\n--- Pairwise Ranking ---")
-    print(f"  Observed pairs in solution: {ranking['n_observed_pairs_in_solution']}"
-          f"/{ranking.get('n_total_pairs_in_solution', '?')}")
+    print(
+        f"  Observed pairs in solution: {ranking['n_observed_pairs_in_solution']}"
+        f"/{ranking.get('n_total_pairs_in_solution', '?')}"
+    )
     if ranking["n_observed_pairs_in_solution"] > 0:
         print(f"  Mean LER of selected pairs: {ranking['mean_ler_of_selected']:.4f}")
-        print(f"  Mean LER of all observed pairs: {ranking['mean_ler_of_all_observed']:.4f}")
+        print(
+            f"  Mean LER of all observed pairs: {ranking['mean_ler_of_all_observed']:.4f}"
+        )
         print(f"  Mean percentile rank: {ranking['mean_percentile_rank']:.1%}")
+        if "permutation_p_value" in ranking:
+            p = ranking["permutation_p_value"]
+            sig = (
+                "***"
+                if p < 0.001
+                else "**"
+                if p < 0.01
+                else "*"
+                if p < 0.05
+                else "n.s."
+            )
+            print(f"  Permutation test p-value: {p:.4f} ({sig})")
         print("  Individual pair ranks:")
         for pair_name, rank in ranking["individual_ranks"]:
-            print(f"    {pair_name}: top {(1-rank):.0%}")
+            print(f"    {pair_name}: top {(1 - rank):.0%}")
 
     if loo_results is not None:
         print(f"\n--- Leave-One-Out Cross-Validation ({len(loo_results)} pairs) ---")
         n_consistent = sum(1 for r in loo_results if r.consistent)
         print(f"  Consistent: {n_consistent}/{len(loo_results)}")
         n_changed = sum(
-            1 for r in loo_results
-            if set(r.full_solution) != set(r.loo_solution)
+            1 for r in loo_results if set(r.full_solution) != set(r.loo_solution)
         )
         print(f"  Solution changed when held out: {n_changed}/{len(loo_results)}")
 
@@ -302,6 +349,8 @@ def print_validation_summary(
             if set(r.full_solution) != set(r.loo_solution):
                 dropped = set(r.full_solution) - set(r.loo_solution)
                 added = set(r.loo_solution) - set(r.full_solution)
-                print(f"    Held out {r.held_out_pair[0]}+{r.held_out_pair[1]} "
-                      f"(LER={r.held_out_ler:.2f}): "
-                      f"dropped {dropped}, added {added}")
+                print(
+                    f"    Held out {r.held_out_pair[0]}+{r.held_out_pair[1]} "
+                    f"(LER={r.held_out_ler:.2f}): "
+                    f"dropped {dropped}, added {added}"
+                )

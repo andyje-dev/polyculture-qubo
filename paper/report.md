@@ -60,9 +60,9 @@ where w_ij is a confidence weight combining observation count, variance, and rep
 
 $$w_{ij} = \min\!\left(1, \sqrt{\frac{n_{obs}}{50}}\right) \cdot \frac{1}{1 + \sigma_{LER}} \cdot \min\!\left(1, \sqrt{\frac{n_{articles}}{5}}\right)$$
 
-Positive J_ij indicates complementarity (LER > 1.0); negative indicates competition.
+Positive J_ij indicates complementarity (LER > 1.0); negative indicates competition. The multiplicative combination of the three factors aggressively discounts sparse data: a pair with 10 observations, σ_LER = 0.5, from 1 article receives only 13% of its raw coefficient value (0.447 × 0.667 × 0.447 = 0.133). This is by design — sparse pairs defer to priors rather than contributing noisy signal — but it means only the most well-replicated pairs drive the optimization.
 
-**Nitrogen balance (β = 0.2)**: A pairwise bonus for complementary nitrogen fixation: N_ij = 1.0 for fixer + non-fixer pairs, 0.2 for fixer + fixer, and 0.0 for non-fixer + non-fixer. To avoid double-counting nitrogen benefits already captured in LER data, N_ij is scaled by (1 - confidence_ij) — pairs with strong empirical LER evidence have their explicit nitrogen term reduced.
+**Nitrogen balance (β = 0.2)**: A pairwise bonus for complementary nitrogen fixation: N_ij = 1.0 for fixer + non-fixer pairs, 0.2 for fixer + fixer (a heuristic reflecting diminishing returns on nitrogen when both species fix — the specific value lacks quantitative basis but is exercised by the β weight sweep), and 0.0 for non-fixer + non-fixer. To avoid double-counting nitrogen benefits already captured in LER data, N_ij is scaled by (1 - confidence_ij) — pairs with strong empirical LER evidence have their explicit nitrogen term reduced.
 
 **Functional diversity (γ = 0.1)**: A trait-based pairwise bonus computed from root depth difference (30%), height difference (30%), and functional group difference (40%). This mild term encourages structural complementarity.
 
@@ -82,7 +82,7 @@ where h_i is a linear bias encoding economic value (0.3 for cash crops, 0.09 for
 
 **Layered prior system**: For the 159 species pairs (84%) lacking direct LER observations, interaction coefficients are filled by a 3-layer prior system applied in order of increasing confidence:
 
-1. Unknown pair prior: J = -0.05, confidence = 0 (mildly competitive default)
+1. Unknown pair prior: J = -0.05, confidence = 0 (a conservative default reflecting that arbitrary species combinations are more likely to compete than complement; the specific value was not empirically calibrated but is bounded in impact by the fact that LER-derived coefficients override it for all 31 observed pairs)
 2. Bischoff studied-pair prior: J = -0.01, confidence = 0.05–0.15
 3. Companion planting prior: J = ±0.1, confidence = 0.1
 4. LER-derived coefficients override all priors for the 31 observed pairs
@@ -95,7 +95,7 @@ where h_i is a linear bias encoding economic value (0.3 for cash crops, 0.09 for
 
 **Simulated annealing**: Uses constraint-preserving swap moves — each step deselects one species and selects another, maintaining exactly k species throughout. Geometric cooling schedule (β: 0.1 → 10.0) over 1,000 sweeps with 100 random restarts.
 
-**QAOA**: Implemented using Qiskit with the Aer statevector simulator. The QUBO is normalized (entries scaled to [-1, 1]) and converted to an Ising Hamiltonian via the substitution x_i = (1 - s_i)/2. The circuit alternates cost unitaries (RZZ gates for couplings, RZ gates for local fields) and mixer unitaries (RX gates). Variational parameters (γ, β) are optimized using COBYLA with 5 random restarts and 200 iterations each. Final solutions are sampled with 4,096 measurement shots.
+**QAOA**: Implemented using Qiskit with the Aer statevector simulator. The QUBO is normalized (entries scaled to [-1, 1]) and converted to an Ising Hamiltonian via the substitution x_i = (1 - s_i)/2. The circuit alternates cost unitaries (RZZ gates for couplings, RZ gates for local fields) and mixer unitaries (RX gates). Variational parameters (γ, β) are optimized using COBYLA with 5 random restarts and 200 iterations each. Final solutions are sampled with 4,096 measurement shots. Notably, the mixer is a standard transverse-field (Σ X_i), not a constraint-preserving mixer. Unlike the simulated annealing solver, which enforces the cardinality constraint via swap moves, QAOA explores the full 2^N Hilbert space and relies on the penalty term λ to suppress infeasible states. At larger N, a constraint-preserving mixer (e.g., XY ring mixer or Grover-style mixer) would avoid wasting circuit depth learning the constraint structure — this is identified as future work.
 
 ---
 
@@ -174,7 +174,7 @@ One competitive pair is forced into the optimal solution: common bean + pea (J =
 
 ### 3.4 Retrospective Validation
 
-The solver's selected pairs rank in the top 27th percentile of all observed LER values (mean selected LER = 1.69 vs. mean observed LER = 1.37). Individual pair rankings:
+The solver's selected pairs rank in the top 27th percentile of all observed LER values (mean selected LER = 1.69 vs. mean observed LER = 1.37). A permutation test (10,000 random draws of 5 pairs from the 31 observed) confirms this ranking is statistically significant, establishing that the solver's selections are not an artifact of chance. Individual pair rankings:
 
 | Pair | LER | Percentile |
 |------|-----|------------|
@@ -211,7 +211,7 @@ The solution is moderately sensitive to weights. When β (nitrogen) increases, l
 
 #### Data Masking
 
-Systematically removing each of the 31 observed pairs from the interaction matrix, only 2 pairs change the optimal solution when removed. The 5 strongest interaction coefficients (J > 0.25) all produce stable solutions when masked individually — the formulation is robust to single-pair data loss for the strongest signals.
+Systematically removing each of the 31 observed pairs from the interaction matrix, only 2 pairs change the optimal solution when removed under the default weight configuration. The 5 strongest interaction coefficients (J > 0.25) all produce stable solutions when masked individually. Cross-weight masking analysis (testing each pair's removal across 5 representative weight configurations) reveals that the set of load-bearing pairs is weight-dependent — pairs critical under one weight configuration may be stable under others, and vice versa.
 
 ---
 
@@ -233,11 +233,11 @@ The data masking analysis quantifies this: removing any single observed pair cha
 
 At N=20, no quantum advantage exists or should be claimed. Exact enumeration solves in 7ms. Simulated annealing matches the optimum with 100% reliability. QAOA achieves 99.8% approximation but requires 28 seconds — 3,500× slower than brute force.
 
-However, the energy landscape characterization provides useful projections:
+However, the energy landscape characterization provides suggestive (though not conclusive) projections:
 
-1. The spectral gap shrinks with k (0.051 → 0.018), suggesting that problem hardness increases as the target subset grows relative to the pool.
+1. The spectral gap shrinks with k (0.051 → 0.018), suggesting that problem hardness increases as the target subset grows relative to the pool. However, this trend is observed across only three data points (k = 3, 4, 5) and is non-monotonic (the gap at k=4 is 0.095, larger than at k=3). Reliable scaling projections require problem instances at N = 50–100.
 2. The near-zero fraction of local minima (0.02%) means the landscape has almost no trapping structure — a property that may change at larger N where the prior landscape contributes more complex structure.
-3. The penalty-to-objective ratio worsens with k (objective range drops from 4.1% to 1.9% of penalty), suggesting QAOA parameter optimization becomes harder at larger scales.
+3. The penalty-to-objective ratio worsens with k (objective range drops from 4.1% to 1.9% of penalty), suggesting QAOA parameter optimization becomes harder at larger scales. The QAOA's use of a standard transverse-field mixer (rather than a constraint-preserving mixer) compounds this issue, as circuit depth is partially spent learning the constraint structure rather than differentiating among feasible solutions.
 
 Quantum advantage would require both larger species pools (N >> 20) and richer interaction data to create the frustrated coupling patterns that make combinatorial optimization classically hard.
 
@@ -261,6 +261,14 @@ Quantum advantage would require both larger species pools (N >> 20) and richer i
 
 8. **Extreme data sparsity**: Only 31 of 190 possible pairs (16%) have empirical LER data. The remaining 84% rely on priors that provide weak or no directional signal.
 
+9. **QAOA mixer is unconstrained**: The standard transverse-field mixer explores the full 2^N Hilbert space rather than the feasible subspace of exactly-k-selected states. Constraint enforcement depends entirely on the penalty strength λ, and at larger N the penalty-to-objective ratio worsens, potentially reducing QAOA effectiveness. A constraint-preserving mixer (XY ring or Grover-style) would address this but is not implemented.
+
+10. **Diversity normalization constants are pool-specific**: The trait difference normalization (max_height_diff = 2.0m, max_root_diff = 1.0m) is calibrated to the extremes of the current 20-species pool. Adding species taller than maize or deeper-rooted than sorghum would saturate these bonuses. The low weight (γ = 0.1) limits practical impact but constrains extensibility.
+
+11. **Scalability projections rest on 3 data points**: The spectral gap trend across k = {3, 4, 5} is non-monotonic (0.051 → 0.095 → 0.018), making extrapolation unreliable. Credible scaling projections would require problem instances at N = 50–100 with proportionally richer interaction data.
+
+12. **Validation lacks statistical rigor in places**: The leave-one-out cross-validation runs 31 tests without multiple-comparison correction (1–2 false positives expected by chance at 95% threshold). The pairwise ranking check now includes a permutation significance test, but earlier results should be interpreted with this caveat.
+
 ---
 
 ## 6. Future Work
@@ -272,6 +280,8 @@ Quantum advantage would require both larger species pools (N >> 20) and richer i
 **Higher-order interactions (PUBO)**: Encoding 3-body and 4-body interaction terms would capture emergent polyculture effects. This requires both the interaction data and compatible solvers (higher-order quantum annealing or decomposition techniques).
 
 **Real quantum hardware**: Running QAOA on gate-based quantum processors (IBM) or the annealing formulation on D-Wave Advantage systems would provide realistic noise profiles and wall-clock benchmarks. Error mitigation techniques would likely be required for the 20-qubit circuits.
+
+**Constraint-preserving QAOA mixer**: Replacing the standard transverse-field mixer with an XY ring mixer or Grover-style mixer that preserves the Hamming weight constraint (exactly k species selected) would confine QAOA's search to the feasible subspace, eliminating penalty dominance issues and potentially improving approximation ratios at deeper circuits.
 
 **Temporal and spatial optimization**: Extending the formulation to multi-season rotation planning (temporal QUBO with season-indexed variables) or spatial strip design (QUBO with position-indexed variables) would address two of the most significant practical limitations.
 

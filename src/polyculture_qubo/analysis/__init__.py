@@ -12,9 +12,11 @@ from polyculture_qubo.analysis.scalability import (
     print_scalability_summary,
 )
 from polyculture_qubo.analysis.sensitivity import (
+    CrossWeightMaskingResult,
     MaskingResult,
     WeightSweepResult,
     analyze_weight_sweep,
+    cross_weight_data_masking,
     data_masking_analysis,
     weight_sweep,
 )
@@ -26,6 +28,7 @@ from polyculture_qubo.analysis.validation import (
 )
 
 __all__ = [
+    "CrossWeightMaskingResult",
     "LOOResult",
     "LandscapeMetrics",
     "MaskingResult",
@@ -34,6 +37,7 @@ __all__ = [
     "analyze_landscape",
     "analyze_weight_sweep",
     "compute_scalability_metrics",
+    "cross_weight_data_masking",
     "data_masking_analysis",
     "frustration_analysis",
     "leave_one_out_cv",

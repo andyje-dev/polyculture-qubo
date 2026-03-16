@@ -15,16 +15,18 @@ Circuit depth p controls the trade-off between expressiveness and optimization
 difficulty. For this 20-qubit problem on a simulator, p=1 to p=5 is tractable.
 """
 
+import logging
 import time
 from dataclasses import dataclass
 
 import numpy as np
 from qiskit import QuantumCircuit
-from qiskit.circuit import Parameter
 from qiskit_aer import AerSimulator
 
 from polyculture_qubo.matrix.qubo import normalize_qubo, qubo_to_ising
 from polyculture_qubo.solvers.result import SolverResult
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -101,15 +103,18 @@ class QAOASolver:
                 best_params = params
 
         # Final sampling with best parameters
+        assert best_params is not None, "No restarts completed"
         gamma_opt = best_params[: config.depth]
         beta_opt = best_params[config.depth :]
-        counts = _sample_qaoa(h_ising, j_ising, n, gamma_opt, beta_opt, config.shots, rng)
+        counts = _sample_qaoa(
+            h_ising, j_ising, n, gamma_opt, beta_opt, config.shots, rng
+        )
 
         elapsed = time.perf_counter() - start
 
         # Extract best solution from measurement results
         best_energy = float("inf")
-        best_solution = None
+        best_solution: np.ndarray = np.zeros(n, dtype=int)
         best_feasible_energy = float("inf")
         best_feasible_solution = None
         all_energies = []
@@ -137,6 +142,15 @@ class QAOASolver:
             feasible = True
         else:
             feasible = False
+            n_selected = int(np.sum(best_solution))
+            logger.warning(
+                "QAOA found no feasible solution (target=%d species, best has %d). "
+                "The standard transverse-field mixer explores the full 2^N space "
+                "and relies on penalty strength to enforce constraints. Consider "
+                "increasing penalty margin or circuit depth.",
+                target_species,
+                n_selected,
+            )
 
         return SolverResult(
             best_solution=best_solution,
@@ -276,7 +290,9 @@ def _optimize_params(
     def objective(params):
         nonlocal n_evals
         n_evals += 1
-        return _evaluate_qaoa_energy(h, j, offset, n, params, config.depth, config.shots, rng)
+        return _evaluate_qaoa_energy(
+            h, j, offset, n, params, config.depth, config.shots, rng
+        )
 
     result = minimize(
         objective,
