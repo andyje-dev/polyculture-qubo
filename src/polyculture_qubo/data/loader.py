@@ -161,7 +161,7 @@ def filter_to_candidate_pairs(df: pd.DataFrame) -> pd.DataFrame:
 
 def compute_pairwise_ler_stats(
     df: pd.DataFrame,
-    ler_cap: float = 3.0,
+    ler_cap: float = 2.5,
 ) -> pd.DataFrame:
     """Compute pairwise LER statistics from filtered Paut data.
 
@@ -171,7 +171,9 @@ def compute_pairwise_ler_stats(
         df: Filtered DataFrame with ler_total, crop_1, crop_2, article_id columns.
         ler_cap: Maximum credible LER value. Observations above this are
             winsorized (capped) to reduce influence of outliers from extreme
-            experimental conditions. Default 3.0 based on meta-analysis norms.
+            experimental conditions. Default 2.5 — LER values above this are
+            exceedingly rare in meta-analyses and typically indicate unusual
+            experimental conditions (e.g., very low monoculture controls).
 
     Returns DataFrame with one row per species pair and columns:
         species_a, species_b: canonical keys (alphabetically ordered)
@@ -184,8 +186,10 @@ def compute_pairwise_ler_stats(
     """
     filtered = df.dropna(subset=["ler_total"]).copy()
 
-    # Winsorize extreme LER values
-    filtered["ler_total"] = filtered["ler_total"].clip(upper=ler_cap)
+    # Winsorize extreme LER values. LER is physically always positive (sum of
+    # yield ratios), and values below 0.3 indicate near-total crop failure —
+    # almost certainly a data entry error or extreme experimental artifact.
+    filtered["ler_total"] = filtered["ler_total"].clip(lower=0.3, upper=ler_cap)
 
     # Normalize pair ordering (alphabetical) so (A,B) == (B,A)
     pairs = pd.DataFrame(
@@ -210,7 +214,11 @@ def compute_pairwise_ler_stats(
         .reset_index()
     )
 
-    # Fill NaN std (single observation) with a high-uncertainty value
-    stats["ler_std"] = stats["ler_std"].fillna(stats["ler_std"].median())
+    # Fill NaN std (single observation) with a high-uncertainty constant.
+    # Using median std of other pairs would understate the true uncertainty
+    # for a single data point. A value of 0.5 (~35% coefficient of variation
+    # at typical LER) reflects that we have essentially no information about
+    # the variability of this pair.
+    stats["ler_std"] = stats["ler_std"].fillna(0.5)
 
     return stats.sort_values("n_obs", ascending=False).reset_index(drop=True)

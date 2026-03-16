@@ -299,9 +299,10 @@ _NAME_ALIASES: dict[str, str] = {
     "lupinus albus": "lupine",
     "lupinus angustifolius": "lupine",
     "triticum durum": "wheat",
-    "brassica napus": "cabbage",
-    "brassica campestris": "cabbage",
-    "brassica juncea": "cabbage",
+    # NOTE: Brassica napus (canola), B. campestris (field mustard), and
+    # B. juncea (mustard greens) are intentionally excluded — they are
+    # distinct species from B. oleracea (cabbage) with different growth
+    # habits, heights, and root systems.
 }
 
 

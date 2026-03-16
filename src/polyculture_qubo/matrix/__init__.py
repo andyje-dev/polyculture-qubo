@@ -12,8 +12,10 @@ from polyculture_qubo.matrix.qubo import (
     build_nitrogen_matrix,
     build_qubo_matrix,
     evaluate_solution,
+    normalize_qubo,
     print_solution,
     qubo_energy,
+    qubo_to_ising,
     solution_to_species,
 )
 
@@ -27,7 +29,9 @@ __all__ = [
     "compute_diversity_bonus",
     "compute_linear_biases",
     "evaluate_solution",
+    "normalize_qubo",
     "print_solution",
     "qubo_energy",
+    "qubo_to_ising",
     "solution_to_species",
 ]

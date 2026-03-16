@@ -8,17 +8,20 @@ Where x_i ∈ {0, 1} indicates whether species i is selected.
 
 The Q matrix combines three objective components and constraint penalties:
 
-    Q_ij = -α * J_ij  -  γ * D_ij  +  2λ          (off-diagonal, i < j)
-    Q_ii = -α * h_i   -  β * N_i   +  λ(1 - 2k)   (diagonal)
+    Q_ij = -α * J_ij  -  β * N_ij  -  γ * D_ij  +  2λ   (off-diagonal, i < j)
+    Q_ii = -α * h_i   +  λ(1 - 2k)                       (diagonal)
 
 Where:
     J_ij = pairwise interaction coefficient (LER-derived)
+    N_ij = pairwise nitrogen balance bonus (fixer + non-fixer = 1.0)
     D_ij = functional diversity bonus
-    h_i  = linear species bias (yield value + N-fixation)
-    N_i  = nitrogen balance contribution
+    h_i  = linear species bias (economic value)
     k    = target number of species to select
     λ    = penalty strength for species count constraint
     α, β, γ = objective component weights (default 0.7, 0.2, 0.1)
+
+When a confidence matrix is provided, N_ij is scaled by (1 - confidence_ij)
+to avoid double-counting nitrogen synergy already captured in LER data.
 
 Sign convention: QUBO minimizes, so beneficial terms are negated.
 """
@@ -77,11 +80,13 @@ def compute_penalty_strength(
     # Max diagonal objective benefit from selecting one species
     max_linear = config.alpha * np.max(np.abs(h))
 
-    # Max pairwise objective benefit from one pair
-    # N-balance max is 1.0 (fixer + non-fixer)
-    max_pairwise = np.max(
-        config.alpha * np.abs(j) + config.beta * 1.0 + config.gamma * np.abs(d)
-    )
+    # Max pairwise objective benefit from one pair.
+    # Compute each component's max separately then sum, rather than
+    # adding beta to every matrix element before taking the max.
+    max_interaction = config.alpha * np.max(np.abs(j))
+    max_n_balance = config.beta * 1.0  # max N-balance score (fixer + non-fixer)
+    max_diversity = config.gamma * np.max(np.abs(d))
+    max_pairwise = max_interaction + max_n_balance + max_diversity
 
     # Worst case: adding one species that has max linear benefit
     # plus k pairwise benefits with already-selected species
@@ -122,6 +127,7 @@ def build_qubo_matrix(
     diversity_matrix: pd.DataFrame,
     biases: pd.DataFrame,
     config: QUBOConfig | None = None,
+    confidence_matrix: pd.DataFrame | None = None,
 ) -> tuple[np.ndarray, list[str]]:
     """Build the QUBO Q matrix from preprocessed components.
 
@@ -130,6 +136,9 @@ def build_qubo_matrix(
         diversity_matrix: Pairwise diversity scores, species-indexed DataFrame
         biases: Linear biases (h_i), species-indexed DataFrame with 'bias' column
         config: QUBO configuration parameters
+        confidence_matrix: Pairwise confidence scores. When provided, the
+            N-balance term is scaled by (1 - confidence) to avoid double-counting
+            with LER data that already captures nitrogen fixation benefits.
 
     Returns:
         (Q, species_keys): Q matrix as numpy array and ordered species key list
@@ -153,6 +162,17 @@ def build_qubo_matrix(
     d = diversity_matrix.loc[species_keys, species_keys].values.copy()
     h = biases.loc[species_keys, "bias"].values.copy()
     n_mat = build_nitrogen_matrix(species_keys)
+
+    # Scale N-balance by (1 - confidence) to avoid double-counting.
+    # LER data already captures cereal-legume nitrogen synergy, so the
+    # explicit N-balance term should only contribute for pairs where we
+    # lack empirical LER evidence.
+    if confidence_matrix is not None:
+        conf = confidence_matrix.loc[species_keys, species_keys].values
+        # Upper triangle only (n_mat is already upper triangular)
+        for i in range(n):
+            for jj in range(i + 1, n):
+                n_mat[i, jj] *= 1.0 - conf[i, jj]
 
     # Build Q matrix (upper triangular form).
     #
@@ -209,8 +229,13 @@ def evaluate_solution(
     j_matrix: pd.DataFrame,
     diversity_matrix: pd.DataFrame,
     config: QUBOConfig | None = None,
+    confidence_matrix: pd.DataFrame | None = None,
 ) -> dict:
     """Evaluate a solution with detailed breakdown of objective components.
+
+    Args:
+        confidence_matrix: If provided, N-balance scores are scaled by
+            (1 - confidence) to match the actual QUBO construction.
 
     Returns a dict with energy, selected species, constraint satisfaction,
     and per-component scores.
@@ -234,10 +259,16 @@ def evaluate_solution(
         for sj in selected[i + 1 :]:
             div_score += diversity_matrix.loc[si, sj]
 
-    # Nitrogen balance (pairwise)
+    # Nitrogen balance (pairwise), with optional confidence scaling
     n_fixers = sum(1 for s in selected if CANDIDATE_SPECIES[s].is_nitrogen_fixer)
     n_non_fixers = n_selected - n_fixers
     n_mat = build_nitrogen_matrix(species_keys)
+    if confidence_matrix is not None:
+        conf = confidence_matrix.loc[species_keys, species_keys].values
+        n = len(species_keys)
+        for i in range(n):
+            for jj in range(i + 1, n):
+                n_mat[i, jj] *= 1.0 - conf[i, jj]
     n_score = 0.0
     for i, si in enumerate(selected):
         idx_i = species_keys.index(si)
@@ -263,6 +294,76 @@ def evaluate_solution(
         "n_cash_crops": n_cash,
         "has_cash_crop": n_cash > 0,
     }
+
+
+def normalize_qubo(q: np.ndarray) -> tuple[np.ndarray, float]:
+    """Normalize a QUBO matrix so its entries lie in [-1, 1].
+
+    QAOA performance depends on the energy scale of the cost Hamiltonian.
+    The variational parameter γ in exp(-iγ H_C) has an optimal range that
+    scales inversely with the spectral width of H_C. When Q entries span
+    orders of magnitude (as ours do — objective terms O(0.01-0.5) vs.
+    penalty terms O(several)), the parameter landscape becomes difficult
+    to navigate.
+
+    Dividing by the max absolute entry puts all Q coefficients in [-1, 1],
+    giving γ a consistent optimal range across problem instances.
+
+    Args:
+        q: Upper triangular QUBO matrix (N x N)
+
+    Returns:
+        (q_normalized, scale): Normalized matrix and scale factor.
+            To recover original energies: E_original = scale * E_normalized
+    """
+    scale = np.max(np.abs(q))
+    if scale == 0:
+        return q.copy(), 1.0
+    return q / scale, scale
+
+
+def qubo_to_ising(q: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
+    """Convert upper-triangular QUBO matrix to Ising model (h, J, offset).
+
+    QAOA circuits operate on Ising spin variables s_i ∈ {-1, +1}, not
+    binary variables x_i ∈ {0, 1}. This function performs the standard
+    substitution x_i = (1 - s_i) / 2 and collects terms.
+
+    The Ising Hamiltonian is:
+        H = offset + Σ_i h_i s_i + Σ_{i<j} J_ij s_i s_j
+
+    The substitution gives:
+        J_ij = Q_ij / 4           (coupling between spins i and j)
+        h_i  = -Q_ii/2 - (1/4) Σ_{j≠i} Q̃_ij   (local field on spin i)
+        offset = (1/2) Σ_i Q_ii + (1/4) Σ_{i<j} Q_ij
+
+    where Q̃_ij is the upper-triangular entry for the pair (i, j).
+
+    Args:
+        q: Upper triangular QUBO matrix (N x N)
+
+    Returns:
+        (h, J, offset): h is N-vector of local fields, J is upper-triangular
+            N x N coupling matrix, offset is a constant energy shift.
+    """
+    n = q.shape[0]
+
+    # Ising couplings: J_ij = Q_ij / 4 for i < j
+    j_ising = np.triu(q, k=1) / 4.0
+
+    # Constant offset
+    offset = 0.5 * np.trace(q) + 0.25 * np.sum(np.triu(q, k=1))
+
+    # Local fields: h_i = -Q_ii/2 - (1/4) * sum of Q entries involving i
+    h = np.zeros(n)
+    for i in range(n):
+        h[i] = -q[i, i] / 2.0
+        # Q entries where i is first index (i < j): q[i, j]
+        h[i] -= 0.25 * np.sum(q[i, i + 1 :])
+        # Q entries where i is second index (j < i): q[j, i]
+        h[i] -= 0.25 * np.sum(q[:i, i])
+
+    return h, j_ising, offset
 
 
 def print_solution(eval_result: dict) -> None:
