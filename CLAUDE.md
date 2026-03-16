@@ -295,45 +295,51 @@ We cannot validate full polyculture recommendations (no ground-truth multi-speci
 - ✅ Solution evaluation with per-component energy breakdown
 - ✅ 54 tests covering all components (all passing)
 
-### Phase 3: Solver Implementation
-- **Start with brute-force exact solver** — enumerate all (20 choose k) feasible solutions, compute energy for each, and establish ground truth. For k=4 this is 4,845 solutions and takes under a second. This also provides the full solution landscape for Phase 4 analysis.
-- **Simulated annealing baseline** (e.g., D-Wave Neal or custom) — implement before QAOA. It validates that the QUBO formulation produces sensible results and provides a classical heuristic benchmark.
-- **QAOA implementation** using Qiskit (Aer simulator)
-  - Parameterized circuits with depth p = 1, 2, 3, 5
-  - Classical optimizer for variational parameters (COBYLA or SPSA)
-  - Use multiple random restarts for the classical optimizer — at higher circuit depths the variational landscape has many local minima
-  - See "QAOA Implementation Considerations" below for normalization and Ising conversion details
-- Optional: D-Wave Advantage via Leap cloud access
-- **Sweep target species count** k ∈ {3, 4, 5} — CLAUDE.md specifies "3–5 species" but the QUBO enforces exactly k via the penalty term. Running all three values and comparing optimal solutions is important for the analysis.
+### Phase 3: Solver Implementation (COMPLETE)
+- ✅ Brute-force exact solver — enumerates all C(N,k) feasible solutions with full landscape collection
+- ✅ Simulated annealing with constraint-preserving swap moves (100 reads × 1000 sweeps)
+- ✅ QAOA implementation using Qiskit Aer simulator (RZZ/RZ cost unitaries, COBYLA optimizer, configurable depth p=1–5)
+- ✅ Unified `SolverResult` dataclass across all solvers
+- ✅ Benchmark runner: `python -m polyculture_qubo.solvers.benchmark`
+- ✅ Sweep k ∈ {3, 4, 5} — all solvers find agronomically plausible cereal-legume polycultures
+- ✅ 22 solver tests (all passing)
 
-### Phase 3 Implementation Considerations
+#### Solver Results Summary
+| k | Optimal Polyculture | SA matches exact | QAOA p=1 approx ratio |
+|---|---------------------|------------------|-----------------------|
+| 3 | Common bean, Maize, Pepper | Yes | 99.8% |
+| 4 | Common bean, Maize, Pea, Pepper | Yes | 99.8% |
+| 5 | Common bean, Maize, Pea, Pepper, Sunflower | Yes | 99.8% |
+
+### Phase 3 Implementation Notes
 
 #### QAOA: Q Matrix Normalization and Ising Conversion
-The Q matrix entries span roughly two orders of magnitude — interaction terms O(0.01–0.5), diversity O(0.1–0.9), and penalty λ O(several). QAOA's variational parameter γ in exp(-iγ H_C) has an optimal range that scales inversely with the spectral width of H_C. Unnormalized Q entries make the parameter landscape harder to optimize.
-
-The `normalize_qubo()` utility divides Q by its max absolute entry, putting all coefficients in [-1, 1] and giving γ a consistent optimal range. The `qubo_to_ising()` utility converts from binary variables x_i ∈ {0,1} to Ising spins s_i ∈ {-1,+1} via x_i = (1 - s_i)/2, producing the (h, J, offset) needed to construct QAOA cost unitaries. Both functions are in `polyculture_qubo.matrix.qubo`.
-
-Intended usage:
-```python
-Q, keys = build_qubo_matrix(j, d, b, config, confidence_matrix=c)
-Q_norm, scale = normalize_qubo(Q)       # entries in [-1, 1]
-h, J, offset = qubo_to_ising(Q_norm)    # Ising form for QAOA circuit
-# Recover original energies: E_original = scale * (E_ising)
-```
+The `normalize_qubo()` utility divides Q by its max absolute entry, putting all coefficients in [-1, 1]. The `qubo_to_ising()` utility converts to Ising spins s_i ∈ {-1,+1} via x_i = (1 - s_i)/2. Both are in `polyculture_qubo.matrix.qubo`.
 
 #### Data Sparsity Awareness
-Only 31 of 190 possible species pairs (16%) have empirical LER data. The remaining 84% use priors (companion planting, Bischoff studied-pair, or unknown-pair default). This means the solver is largely navigating a flat prior landscape with a handful of data-informed peaks. Expect the optimal solutions to be drawn heavily from the ~12 species that appear in well-observed pairs (maize, common bean, cowpea, lettuce, tomato, pea, cabbage, etc.). This is a feature to discuss honestly, not a bug to hide — it motivates the "data gap" analysis in Phase 4.
+Only 31 of 190 possible species pairs (16%) have empirical LER data. The solver is largely navigating a flat prior landscape with data-informed islands. Optimal solutions are drawn from the ~12 well-studied species. This motivates the data gap analysis in Phase 4.
 
 #### Diversity Matrix Blind Spot
-Barley, wheat, and oat have near-zero pairwise diversity scores (same height, root depth, and functional group). The formulation has no mechanism to discourage selecting multiple very similar cereals other than the weak unknown-pair prior (-0.05). If λ dominates (which it will with auto-derivation), the solver may treat these as interchangeable. Watch for this in results and consider whether it indicates a missing "redundancy penalty" term.
+Barley, wheat, and oat have near-zero pairwise diversity scores (same height, root depth, and functional group). The formulation has no mechanism to discourage selecting multiple very similar cereals other than the weak unknown-pair prior (-0.05). In practice, the solver never selects these species because they lack strong LER data.
 
-### Phase 4: Analysis & Visualization
-- Compare solver results across methods
-- **Energy landscape characterization** (degeneracy, gap structure, local minima density) — this is the centerpiece analysis for quantum advantage claims. Since we cannot claim quantum advantage at N=20 (brute force is trivial), the scientifically interesting contribution is characterizing the problem structure: How many near-optimal solutions exist? How large is the spectral gap? Does the problem exhibit the frustrated coupling patterns that make optimization hard at larger N?
-- Retrospective validation against empirical data
-- Scalability projection (how does problem hardness grow with N?)
-- **Sensitivity analysis on objective function weights** (α, β, γ) — vary weights and check whether the optimal polyculture changes. If it doesn't, the objective is dominated by one term. If it does, the weight sensitivity is a finding worth reporting.
-- **Data coverage analysis** — systematically mask observed pairs and show how solution quality degrades, making the case for which additional intercropping experiments would be most valuable
+### Phase 4: Analysis & Visualization (COMPLETE)
+- ✅ Energy landscape characterization (degeneracy, spectral gap, local minima density, frustration analysis)
+- ✅ Penalty decomposition: objective-only landscape reveals real structure hidden by λ offset
+- ✅ Retrospective validation against empirical LER data (pairwise ranking, contribution tables)
+- ✅ Leave-one-out cross-validation (31 observed pairs)
+- ✅ Sensitivity analysis: weight sweep (120 configurations, 12 unique optimal solutions)
+- ✅ Data masking: 2 of 31 pairs are load-bearing (removing them changes the solution)
+- ✅ Scalability projection with QAOA approximation ratios
+- ✅ 7 publication-quality figure types, saved to `output/figures/`
+- ✅ Unified analysis runner: `python -m polyculture_qubo.analysis.run`
+- ✅ 16 analysis tests (all passing)
+
+#### Key Phase 4 Findings
+- **Landscape flatness is an artifact of penalty dominance**: 100% of feasible solutions are within 5% of optimum in total energy, but only 0.04% are within 5% of the objective-only optimum (penalty subtracted). The agronomic signal is real but contributes only ~3% of total energy.
+- **Solution is moderately sensitive to weights**: 12 distinct optimal solutions across 120 weight configurations. Maize appears in 88% of all configs (most robust selection).
+- **Two load-bearing data pairs**: removing maize+pea or common_bean+pepper flips the optimal solution.
+- **Spectral gap shrinks with k** (0.051 → 0.018), suggesting the problem gets harder at larger scale.
+- **No quantum advantage at N=20**: brute force solves in 7ms. QAOA achieves 99.8% approximation ratio but takes 28s.
 
 ### Phase 5: Documentation & Output
 - Technical report / paper draft
@@ -345,19 +351,14 @@ Barley, wheat, and oat have near-zero pairwise diversity scores (same height, ro
 
 ## Tech Stack
 
-### Currently installed
 - **Language**: Python 3.13+
 - **Data processing**: pandas, numpy, scipy
-- **Graph analysis**: networkx (available, not yet used)
-- **Visualization**: matplotlib, seaborn (available, not yet used for output)
+- **Quantum**: Qiskit 2.3+, Qiskit Aer (QAOA simulator)
+- **Graph analysis**: networkx
+- **Visualization**: matplotlib, seaborn
 - **Data acquisition**: requests, openpyxl, kaggle
 - **Dev tools**: pytest, ruff (format + lint), ty (type checking), lefthook (git hooks)
 - **Data storage**: CSV for interaction matrices
-
-### Needed for Phase 3
-- **Quantum**: Qiskit (QAOA, Aer simulator) — not yet installed
-- **Optional**: D-Wave Ocean SDK (quantum annealing)
-- **Exact solver**: brute-force enumeration is sufficient at N=20; no Gurobi/PuLP needed
 
 ---
 
@@ -376,8 +377,8 @@ Barley, wheat, and oat have near-zero pairwise diversity scores (same height, ro
 
 The project is successful if we:
 1. ✅ Produce a valid QUBO formulation grounded in real agronomic data
-2. ☐ Demonstrate the formulation works (solver finds physically meaningful solutions — not random species subsets)
-3. ☐ Benchmark quantum vs. classical solvers on the same instance
-4. ☐ Characterize the energy landscape to make credible projections about quantum advantage at scale
-5. ☐ Identify and articulate the specific data gaps that would need to be filled for practical deployment
+2. ✅ Demonstrate the formulation works (solver finds physically meaningful solutions — not random species subsets)
+3. ✅ Benchmark quantum vs. classical solvers on the same instance
+4. ✅ Characterize the energy landscape to make credible projections about quantum advantage at scale
+5. ✅ Identify and articulate the specific data gaps that would need to be filled for practical deployment
 6. ✅ Produce a reusable, extensible codebase that the community can build on
