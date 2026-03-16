@@ -13,6 +13,6 @@ pre-commit:
 pre-push:
   commands:
     secrets:
-      run: gitleaks detect --source . --log-opts "{push_range}"
+      run: gitleaks detect --source . --log-opts "$(git rev-parse @{upstream} 2>/dev/null || echo HEAD~1)..HEAD"
     tests:
       run: python -m pytest tests/ -x -q
