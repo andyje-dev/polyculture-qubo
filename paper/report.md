@@ -2,7 +2,7 @@
 
 ## Abstract
 
-Selecting complementary crop species for polyculture systems is a combinatorial optimization problem that grows intractable as candidate pools expand. We present the first Quadratic Unconstrained Binary Optimization (QUBO) formulation for polyculture species selection grounded in empirical intercropping data. Drawing on 2,231 experimental observations from the Paut et al. horticulture dataset, 274 species pairs from Bischoff et al., and a companion planting network, we construct a composite objective encoding Land Equivalent Ratio (LER), nitrogen fixation complementarity, and functional diversity for a pool of 20 candidate species. We solve the resulting QUBO using exact enumeration, simulated annealing, and the Quantum Approximate Optimization Algorithm (QAOA), finding that all three methods converge on agronomically plausible cereal-legume polycultures validated against empirical LER rankings. Energy landscape analysis reveals that while the total energy surface appears flat (100% of feasible solutions within 5% of optimum), this is an artifact of penalty term dominance — the objective-only landscape shows meaningful differentiation (0.04% within 5%). At the current scale of N=20 species, no quantum advantage exists, but spectral gap analysis suggests increasing problem hardness at larger scales.
+Selecting complementary crop species for polyculture systems is a combinatorial optimization problem that grows intractable as candidate pools expand. We present the first Quadratic Unconstrained Binary Optimization (QUBO) formulation for polyculture species selection grounded in empirical intercropping data. Drawing on 2,231 experimental observations from the Paut et al. horticulture dataset, 274 species pairs from Bischoff et al., and a companion planting network, we construct a composite objective encoding Land Equivalent Ratio (LER), nitrogen fixation complementarity, and functional diversity for a pool of 20 candidate species. We solve the resulting QUBO using exact enumeration, simulated annealing, and the Quantum Approximate Optimization Algorithm (QAOA). Exact enumeration and simulated annealing agree on agronomically plausible cereal-legume polycultures at every target size; QAOA reaches the same optimum in 3 of 9 depth-by-target configurations but is unreliable, in one case returning a solution worse than a random feasible draw. Energy landscape analysis reveals that while the total energy surface appears flat (100% of feasible solutions within 5% of optimum), this is an artifact of penalty term dominance — the objective-only landscape shows meaningful differentiation (0.04% within 5%). The same artifact invalidates the conventional approximation ratio, whose floor over the entire feasible set is 0.974 at k=4; we therefore report offset-invariant quality metrics throughout. At the current scale of N=20 species, no quantum advantage exists.
 
 ---
 
@@ -97,6 +97,22 @@ where h_i is a linear bias encoding economic value (0.3 for cash crops, 0.09 for
 
 **QAOA**: Implemented using Qiskit with the Aer statevector simulator. The QUBO is normalized (entries scaled to [-1, 1]) and converted to an Ising Hamiltonian via the substitution x_i = (1 - s_i)/2. The circuit alternates cost unitaries (RZZ gates for couplings, RZ gates for local fields) and mixer unitaries (RX gates). Variational parameters (γ, β) are optimized using COBYLA with 5 random restarts and 200 iterations each. Final solutions are sampled with 4,096 measurement shots. Notably, the mixer is a standard transverse-field (Σ X_i), not a constraint-preserving mixer. Unlike the simulated annealing solver, which enforces the cardinality constraint via swap moves, QAOA explores the full 2^N Hilbert space and relies on the penalty term λ to suppress infeasible states. At larger N, a constraint-preserving mixer (e.g., XY ring mixer or Grover-style mixer) would avoid wasting circuit depth learning the constraint structure — this is identified as future work.
 
+### 2.6 Solution Quality Metrics
+
+The conventional approximation ratio E_alg / E_opt is not a valid quality measure for this problem, and reporting it would substantially overstate solver performance. Expanding the cardinality penalty λ(Σx − k)² produces a constant λk² that the QUBO construction drops, since a constant cannot change which solution is optimal. Every feasible solution therefore carries a shared offset of −k²λ, which at k=4 is −68.99 against an optimum of −71.55: **96.4% of the energy magnitude is common to every feasible solution**. The ratio compresses toward 1 accordingly. Its floor over the entire feasible set is 0.974 at k=4, so even the worst possible answer scores 97%.
+
+The optimization problem is invariant under adding a constant to the energy; a ratio of energies is not. We therefore report two invariant metrics.
+
+**β (primary)** measures quality relative to a uniformly random feasible solution:
+
+$$\beta = \frac{E_{\text{random}} - E_{\text{alg}}}{E_{\text{random}} - E_{\text{opt}}}$$
+
+β = 1 is optimal, β = 0 is no better than drawing a feasible solution at random, and β < 0 is worse than random. Every term is an energy difference, so β is unchanged by a constant shift. E_random is estimated by uniform sampling from the feasible set rather than exhaustive enumeration, so the metric remains computable at problem sizes where enumeration is impossible; at N=20 the sampled estimate agrees with the exhaustive mean to within one standard error at every k.
+
+**Rank** is the position of the solution among all feasible solutions (1 = optimal), using competition ranking so that ties share a rank. It requires no baseline and cannot be misread, but requires enumeration and so is only available at small N.
+
+Where the total-energy ratio appears below it is accompanied by its floor, so the reader can see how little of its range is usable.
+
 ---
 
 ## 3. Results
@@ -128,13 +144,45 @@ The common_bean + pea pair has no direct LER data and uses the unknown-pair prio
 
 ### 3.2 Solver Comparison
 
-| Solver | Energy (k=4) | Time | Approx. Ratio |
-|--------|-------------|------|---------------|
-| Exact | -71.553 | 0.008s | 1.000 |
-| Simulated annealing | -71.553 | 2.5s | 1.000 |
-| QAOA (p=1) | -71.402 | 28.1s | 0.998 |
+At k=4:
 
-Simulated annealing matches the exact optimum on every instance. QAOA at depth p=1 achieves a 99.8% approximation ratio, finding a near-optimal feasible solution (common bean, crimson clover, maize, pepper) that swaps pea for crimson clover — the second-best solution in the exact ranking.
+| Solver | Energy | Time | β | Rank | Total ratio |
+|--------|--------|------|-----|------|-------------|
+| Exact | -71.553 | 0.008s | +1.000 | 1 / 4,845 | 1.000 |
+| Simulated annealing | -71.553 | 2.5s | +1.000 | 1 / 4,845 | 1.000 |
+| QAOA (p=1) | -71.402 | 28.9s | +0.842 | 5 / 4,845 | 0.998 |
+| QAOA (p=2) | -71.410 | 44.0s | +0.849 | 4 / 4,845 | 0.998 |
+| QAOA (p=3) | -71.553 | 66.7s | +1.000 | 1 / 4,845 | 1.000 |
+| *(random feasible draw)* | -70.601 | — | 0.000 | — | 0.987 |
+| *(worst feasible solution)* | -69.684 | — | -0.963 | 4,845 / 4,845 | 0.974 |
+
+The last two rows are the reason the total-energy ratio must not be used: a random draw scores 0.987 on it and the worst possible answer scores 0.974. The entire feasible set spans 2.6 percentage points of that metric.
+
+Simulated annealing matches the exact optimum on every instance and at every k. QAOA's behavior is far more variable than a single depth or a single k suggests:
+
+| k | p=1 | p=2 | p=3 |
+|---|-----|-----|-----|
+| 3 | **-0.525** (1067 / 1,140) | **+1.000** (1 / 1,140) | +0.643 (12 / 1,140) |
+| 4 | +0.842 (5 / 4,845) | +0.849 (4 / 4,845) | **+1.000** (1 / 4,845) |
+| 5 | **+1.000** (1 / 15,504) | +0.775 (47 / 15,504) | +0.867 (12 / 15,504) |
+
+*β (rank among the C(20,k) feasible solutions). Bold marks the best depth for each k.*
+
+Three observations follow, none of which is visible through the total-energy ratio (which reports every one of these nine cells as ≥ 0.961):
+
+1. **QAOA reaches the exact optimum in 3 of 9 configurations** — at (k=3, p=2), (k=4, p=3), and (k=5, p=1).
+2. **At k=3, p=1 is worse than a random feasible draw** (β = −0.525, rank 1067 of 1,140). It returns barley, maize, and sorghum — three cereals, no nitrogen fixer, and not a single pair with empirical LER data. The total-energy ratio rates this same run at 0.967.
+3. **Quality is not monotone in circuit depth.** It improves with depth at k=4, collapses then partially recovers at k=5, and swings from worse-than-random to optimal and back at k=3. This is consistent with the variational outer loop failing to converge reliably rather than with depth being insufficient (see §4).
+
+**In-constraint probability.** The share of measurement shots landing in the feasible subspace (Hamming weight exactly k) is offset-invariant and measures how much constraint structure the circuit learned. It is the one figure that distinguishes QAOA from a uniform sampler:
+
+| k | uniform C(20,k)/2²⁰ | p=1 | p=2 | p=3 |
+|---|---------------------|-----|-----|-----|
+| 3 | 0.109% | 0.05% (0.4×) | 39.75% (366×) | 17.75% (163×) |
+| 4 | 0.462% | 31.27% (68×) | 36.72% (79×) | 26.93% (58×) |
+| 5 | 1.479% | 34.67% (23×) | 8.50% (5.7×) | 41.53% (28×) |
+
+Eight of the nine configurations concentrate probability in the feasible subspace by 5.7× to 366× over uniform sampling, with a standard transverse-field mixer and no constraint-preserving machinery. The exception is (k=3, p=1), which is *below* uniform at 0.4× — it actively avoids the feasible subspace, which explains its worse-than-random solution.
 
 ### 3.3 Energy Landscape
 
@@ -221,7 +269,11 @@ Systematically removing each of the 31 observed pairs from the interaction matri
 
 The most striking finding is the penalty decomposition: the constraint enforcement term contributes ~97% of total energy for feasible solutions, compressing the objective signal into a narrow band. This is not a flaw in the formulation — it is an inherent property of QUBO constraint encoding. The auto-derived λ must be large enough to guarantee that no infeasible solution can beat any feasible one, and this requirement pushes λ well above the objective scale.
 
-For classical solvers, this is irrelevant — simulated annealing with constraint-preserving moves ignores the penalty entirely, exploring only the feasible subspace. For QAOA, however, the penalty dominance means the cost Hamiltonian's spectral structure is shaped primarily by the constraint, not the objective. QAOA must first "learn" the constraint structure before it can differentiate among feasible solutions. This may explain why deeper circuits are needed for high approximation ratios in constrained QUBO problems.
+For classical solvers, this is irrelevant — simulated annealing with constraint-preserving moves ignores the penalty entirely, exploring only the feasible subspace. For QAOA, however, the penalty dominance means the cost Hamiltonian's spectral structure is shaped primarily by the constraint, not the objective. QAOA must first "learn" the constraint structure before it can differentiate among feasible solutions.
+
+The in-constraint probabilities in §3.2 show this happening: eight of nine configurations concentrate 5.7× to 366× more probability in the feasible subspace than uniform sampling, so the circuit does learn the constraint. What it does not reliably do is discriminate *within* that subspace, which is where the 2.7% of energy carrying agronomic signal lives. The depth sweep does not support the intuition that deeper circuits monotonically recover this: quality improves with depth at k=4 but degrades at k=5 and is non-monotone at k=3.
+
+Penalty dominance also has a measurement consequence that is easy to miss and that we initially made ourselves. Any quality metric shaped like E_alg / E_opt inherits the constant offset and compresses toward 1, so it will report a solver as near-optimal almost regardless of what it found. This is a general property of penalty-encoded constrained QUBOs, not a quirk of this instance, and it argues for offset-invariant reporting (§2.6) in any such benchmark.
 
 ### Data Sparsity
 
@@ -231,7 +283,9 @@ The data masking analysis quantifies this: removing any single observed pair cha
 
 ### Quantum Advantage Assessment
 
-At N=20, no quantum advantage exists or should be claimed. Exact enumeration solves in 7ms. Simulated annealing matches the optimum with 100% reliability. QAOA achieves 99.8% approximation but requires 28 seconds — 3,500× slower than brute force.
+At N=20, no quantum advantage exists or should be claimed. Exact enumeration solves in 9ms. Simulated annealing matches the optimum with 100% reliability at every k. QAOA reaches the exact optimum in 3 of 9 (k, p) configurations but requires 29–67 seconds — three to four orders of magnitude slower than brute force — and its quality is not reliable: at (k=3, p=1) it returns a solution worse than a random feasible draw.
+
+The instability is more informative than the average quality. QAOA's variational objective is estimated from 4,096 measurement shots and handed to COBYLA, a deterministic trust-region method that assumes a smooth, noise-free objective. The resulting shot noise on the objective is of the same order as the entire objective range being optimized over — the constant penalty offset means the agronomic signal occupies only 2.7% of the total energy at k=4, while the sampling noise does not shrink correspondingly. The non-monotonicity in depth is therefore better explained by outer-loop convergence failure than by insufficient circuit expressiveness, and deeper circuits alone should not be expected to fix it. Using an exact statevector expectation (cheap at N=20) or a stochastic-objective optimizer such as SPSA would isolate this.
 
 However, the energy landscape characterization provides suggestive (though not conclusive) projections:
 
@@ -281,7 +335,9 @@ Quantum advantage would require both larger species pools (N >> 20) and richer i
 
 **Real quantum hardware**: Running QAOA on gate-based quantum processors (IBM) or the annealing formulation on D-Wave Advantage systems would provide realistic noise profiles and wall-clock benchmarks. Error mitigation techniques would likely be required for the 20-qubit circuits.
 
-**Constraint-preserving QAOA mixer**: Replacing the standard transverse-field mixer with an XY ring mixer or Grover-style mixer that preserves the Hamming weight constraint (exactly k species selected) would confine QAOA's search to the feasible subspace, eliminating penalty dominance issues and potentially improving approximation ratios at deeper circuits.
+**Constraint-preserving QAOA mixer**: Replacing the standard transverse-field mixer with an XY ring mixer or Grover-style mixer that preserves the Hamming weight constraint (exactly k species selected) would confine QAOA's search to the feasible subspace, eliminating penalty dominance issues. The in-constraint probabilities in §3.2 bound the expected gain: the current mixer already reaches 27–42% feasible sampling at k=4 and k=5, so a constraint-preserving mixer would recover at most a factor of ~3 in effective shot count, and the harder problem — discriminating within the feasible subspace — would remain.
+
+**Noise-aware variational optimization**: The QAOA outer loop currently passes a 4,096-shot sampled expectation to COBYLA, which assumes a deterministic objective. Substituting the exact statevector expectation (tractable at N=20) or a stochastic optimizer such as SPSA would establish whether the non-monotone depth behavior in §3.2 is a convergence artifact or a genuine property of the ansatz.
 
 **Temporal and spatial optimization**: Extending the formulation to multi-season rotation planning (temporal QUBO with season-indexed variables) or spatial strip design (QUBO with position-indexed variables) would address two of the most significant practical limitations.
 
