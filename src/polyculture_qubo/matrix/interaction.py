@@ -176,7 +176,9 @@ def _apply_companion_prior(
     valid["species_a"] = np.minimum(valid["crop_1"], valid["crop_2"])
     valid["species_b"] = np.maximum(valid["crop_1"], valid["crop_2"])
 
-    for (a, b), group in valid.groupby(["species_a", "species_b"]):
+    # Grouping by two columns yields a (species_a, species_b) tuple key, which
+    # pandas types only as Hashable.
+    for (a, b), group in valid.groupby(["species_a", "species_b"]):  # ty: ignore[not-iterable]
         if a not in key_to_idx or b not in key_to_idx:
             continue
         if a == b:

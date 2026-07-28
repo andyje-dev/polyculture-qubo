@@ -71,6 +71,11 @@ class ExactSolver:
         elapsed = time.perf_counter() - start
         num_evaluated = len(all_energies) if collect_all else _n_choose_k(n, k)
 
+        if best_solution is None:
+            raise ValueError(
+                f"No feasible solution exists: cannot select k={k} from n={n} species"
+            )
+
         return SolverResult(
             best_solution=best_solution,
             best_energy=best_energy,
@@ -104,4 +109,5 @@ def _qubo_energy_fast(q: np.ndarray, selected_indices: tuple[int, ...]) -> float
 def _n_choose_k(n: int, k: int) -> int:
     """Compute binomial coefficient."""
     from math import comb
+
     return comb(n, k)

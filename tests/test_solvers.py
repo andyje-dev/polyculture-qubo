@@ -157,8 +157,12 @@ class TestSimulatedAnnealing:
         """Same seed should produce same result."""
         q = _make_small_qubo()
 
-        r1 = SimulatedAnnealingSolver().solve(q, target_species=2, num_reads=10, seed=123)
-        r2 = SimulatedAnnealingSolver().solve(q, target_species=2, num_reads=10, seed=123)
+        r1 = SimulatedAnnealingSolver().solve(
+            q, target_species=2, num_reads=10, seed=123
+        )
+        r2 = SimulatedAnnealingSolver().solve(
+            q, target_species=2, num_reads=10, seed=123
+        )
 
         assert r1.best_energy == pytest.approx(r2.best_energy)
         np.testing.assert_array_equal(r1.best_solution, r2.best_solution)
@@ -168,7 +172,9 @@ class TestSimulatedAnnealing:
         q = _make_small_qubo()
 
         r1 = SimulatedAnnealingSolver().solve(q, target_species=2, num_reads=1, seed=1)
-        r2 = SimulatedAnnealingSolver().solve(q, target_species=2, num_reads=1, seed=999)
+        r2 = SimulatedAnnealingSolver().solve(
+            q, target_species=2, num_reads=1, seed=999
+        )
 
         # Both should be feasible
         assert np.sum(r1.best_solution) == 2
@@ -259,9 +265,7 @@ class TestQAOA:
     def test_qaoa_runs_and_returns_result(self):
         """QAOA should complete without errors on a tiny problem."""
         q = _make_tiny_qubo()
-        config = QAOAConfig(
-            depth=1, num_restarts=2, max_iter=20, shots=512, seed=42
-        )
+        config = QAOAConfig(depth=1, num_restarts=2, max_iter=20, shots=512, seed=42)
 
         result = QAOASolver().solve(q, target_species=2, config=config)
 
@@ -295,8 +299,12 @@ class TestQAOA:
         """Deeper circuits with more restarts should not do worse on average."""
         q = _make_tiny_qubo()
 
-        config_shallow = QAOAConfig(depth=1, num_restarts=3, max_iter=30, shots=1024, seed=42)
-        config_deep = QAOAConfig(depth=2, num_restarts=5, max_iter=50, shots=1024, seed=42)
+        config_shallow = QAOAConfig(
+            depth=1, num_restarts=3, max_iter=30, shots=1024, seed=42
+        )
+        config_deep = QAOAConfig(
+            depth=2, num_restarts=5, max_iter=50, shots=1024, seed=42
+        )
 
         r_shallow = QAOASolver().solve(q, target_species=2, config=config_shallow)
         r_deep = QAOASolver().solve(q, target_species=2, config=config_deep)
@@ -327,7 +335,9 @@ class TestQAOA:
         qaoa = QAOASolver().solve(
             q,
             target_species=2,
-            config=QAOAConfig(depth=2, num_restarts=5, max_iter=50, shots=2048, seed=42),
+            config=QAOAConfig(
+                depth=2, num_restarts=5, max_iter=50, shots=2048, seed=42
+            ),
         )
 
         # QAOA should find a solution within 50% of the exact optimum

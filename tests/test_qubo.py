@@ -38,21 +38,30 @@ class TestNitrogenMatrix:
         keys = sorted(CANDIDATE_SPECIES.keys())
         n_mat = build_nitrogen_matrix(keys)
         # Cowpea (fixer) + Maize (non-fixer) should score 1.0
-        i, j = min(keys.index("cowpea"), keys.index("maize")), max(keys.index("cowpea"), keys.index("maize"))
+        i, j = (
+            min(keys.index("cowpea"), keys.index("maize")),
+            max(keys.index("cowpea"), keys.index("maize")),
+        )
         assert n_mat[i, j] == 1.0
 
     def test_fixer_fixer_low(self):
         keys = sorted(CANDIDATE_SPECIES.keys())
         n_mat = build_nitrogen_matrix(keys)
         # Cowpea (fixer) + Pea (fixer) should score 0.2
-        i, j = min(keys.index("cowpea"), keys.index("pea")), max(keys.index("cowpea"), keys.index("pea"))
+        i, j = (
+            min(keys.index("cowpea"), keys.index("pea")),
+            max(keys.index("cowpea"), keys.index("pea")),
+        )
         assert n_mat[i, j] == 0.2
 
     def test_nonfixer_nonfixer_zero(self):
         keys = sorted(CANDIDATE_SPECIES.keys())
         n_mat = build_nitrogen_matrix(keys)
         # Maize (non-fixer) + Wheat (non-fixer) should score 0.0
-        i, j = min(keys.index("maize"), keys.index("wheat")), max(keys.index("maize"), keys.index("wheat"))
+        i, j = (
+            min(keys.index("maize"), keys.index("wheat")),
+            max(keys.index("maize"), keys.index("wheat")),
+        )
         assert n_mat[i, j] == 0.0
 
     def test_upper_triangular(self):

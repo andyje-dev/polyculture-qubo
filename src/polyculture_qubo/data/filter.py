@@ -35,7 +35,9 @@ def filter_species_by_coverage(
             pair_counts[sp] = pair_counts.get(sp, 0) + 1
 
     # Filter to species meeting the minimum pairs threshold
-    selected = [sp for sp, count in pair_counts.items() if count >= min_pairs_per_species]
+    selected = [
+        sp for sp, count in pair_counts.items() if count >= min_pairs_per_species
+    ]
 
     return sorted(selected)
 
@@ -45,7 +47,7 @@ def print_coverage_report(
     selected_species: list[str],
 ) -> None:
     """Print a human-readable report of species data coverage."""
-    print(f"\n=== Species Pool Filter Report ===")
+    print("\n=== Species Pool Filter Report ===")
     print(f"Total candidates: {len(CANDIDATE_SPECIES)}")
     print(f"Selected (sufficient data): {len(selected_species)}")
     print()
@@ -68,7 +70,7 @@ def print_coverage_report(
         print(f"{sp.common_name:<20} {n_pairs:>5} {n_obs:>6} {sel:>8}")
 
     # Coverage matrix for selected species
-    print(f"\n=== Pair coverage for selected species ===")
+    print("\n=== Pair coverage for selected species ===")
     good_pairs = ler_stats[ler_stats["n_obs"] >= 3]
     selected_pairs = good_pairs[
         good_pairs["species_a"].isin(selected_species)
