@@ -75,6 +75,9 @@ class SimulatedAnnealingSolver:
 
         elapsed = time.perf_counter() - start
 
+        if best_solution is None:
+            raise ValueError(f"No solution found: num_reads={num_reads} must be >= 1")
+
         return SolverResult(
             best_solution=best_solution,
             best_energy=best_energy,

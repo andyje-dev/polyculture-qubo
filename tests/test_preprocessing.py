@@ -22,7 +22,12 @@ from polyculture_qubo.matrix import (
 )
 
 RAW_DATA = Path(__file__).resolve().parent.parent / "data" / "raw" / "paut_database.csv"
-BISCHOFF_DATA = Path(__file__).resolve().parent.parent / "data" / "raw" / "bischoff_species_pairs.csv"
+BISCHOFF_DATA = (
+    Path(__file__).resolve().parent.parent
+    / "data"
+    / "raw"
+    / "bischoff_species_pairs.csv"
+)
 SKIP_NO_DATA = pytest.mark.skipif(
     not RAW_DATA.exists(), reason="Raw data not downloaded"
 )
@@ -56,7 +61,9 @@ class TestSpeciesNormalization:
     def test_all_candidates_self_resolve(self):
         for key, sp in CANDIDATE_SPECIES.items():
             resolved = normalize_species_name(sp.common_name)
-            assert resolved == key, f"{sp.common_name} should resolve to {key}, got {resolved}"
+            assert resolved == key, (
+                f"{sp.common_name} should resolve to {key}, got {resolved}"
+            )
 
 
 class TestConfidenceWeight:
@@ -101,7 +108,17 @@ class TestInteractionMatrix:
         assert conf.loc["cowpea", "maize"] == conf.loc["maize", "cowpea"]
 
     def test_diagonal_zero(self):
-        stats = pd.DataFrame(columns=["species_a", "species_b", "ler_mean", "ler_std", "n_obs", "n_articles", "pct_above_1"])
+        stats = pd.DataFrame(
+            columns=[
+                "species_a",
+                "species_b",
+                "ler_mean",
+                "ler_std",
+                "n_obs",
+                "n_articles",
+                "pct_above_1",
+            ]
+        )
         j, _ = build_interaction_matrix(stats)
         for sp in j.index:
             assert j.loc[sp, sp] == 0.0
@@ -137,14 +154,34 @@ class TestInteractionMatrix:
         assert j.loc["cowpea", "maize"] < 0
 
     def test_unknown_pairs_get_prior(self):
-        stats = pd.DataFrame(columns=["species_a", "species_b", "ler_mean", "ler_std", "n_obs", "n_articles", "pct_above_1"])
+        stats = pd.DataFrame(
+            columns=[
+                "species_a",
+                "species_b",
+                "ler_mean",
+                "ler_std",
+                "n_obs",
+                "n_articles",
+                "pct_above_1",
+            ]
+        )
         prior = -0.03
         j, _ = build_interaction_matrix(stats, unknown_pair_prior=prior)
         # Check an arbitrary non-diagonal pair
         assert j.loc["barley", "sunflower"] == prior
 
     def test_matrix_shape(self):
-        stats = pd.DataFrame(columns=["species_a", "species_b", "ler_mean", "ler_std", "n_obs", "n_articles", "pct_above_1"])
+        stats = pd.DataFrame(
+            columns=[
+                "species_a",
+                "species_b",
+                "ler_mean",
+                "ler_std",
+                "n_obs",
+                "n_articles",
+                "pct_above_1",
+            ]
+        )
         j, conf = build_interaction_matrix(stats)
         n = len(CANDIDATE_SPECIES)
         assert j.shape == (n, n)
@@ -227,8 +264,15 @@ class TestBischoffExtraction:
     def test_bischoff_boosts_coverage(self):
         """Bischoff data should increase pair coverage vs LER-only."""
         stats = pd.DataFrame(
-            columns=["species_a", "species_b", "ler_mean", "ler_std",
-                      "n_obs", "n_articles", "pct_above_1"]
+            columns=[
+                "species_a",
+                "species_b",
+                "ler_mean",
+                "ler_std",
+                "n_obs",
+                "n_articles",
+                "pct_above_1",
+            ]
         )
         # Without Bischoff: only unknown prior
         j_no, conf_no = build_interaction_matrix(stats)

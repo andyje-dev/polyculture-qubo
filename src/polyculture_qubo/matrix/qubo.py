@@ -185,9 +185,12 @@ def build_qubo_matrix(
     for i in range(n):
         for jj in range(i + 1, n):
             q[i, jj] = (
-                -config.alpha * j[i, jj]  # Interaction: complementary pairs → negative Q (good)
-                - config.beta * n_mat[i, jj]  # N-balance: fixer+non-fixer pairs → negative Q (good)
-                - config.gamma * d[i, jj]  # Diversity: different species → negative Q (good)
+                -config.alpha
+                * j[i, jj]  # Interaction: complementary pairs → negative Q (good)
+                - config.beta
+                * n_mat[i, jj]  # N-balance: fixer+non-fixer pairs → negative Q (good)
+                - config.gamma
+                * d[i, jj]  # Diversity: different species → negative Q (good)
                 + 2 * lam  # Count constraint: penalizes selecting extra pairs
             )
 
@@ -195,7 +198,8 @@ def build_qubo_matrix(
     for i in range(n):
         q[i, i] = (
             -config.alpha * h[i]  # Species value: good species → negative Q (good)
-            + lam * (1 - 2 * k)  # Count constraint: encourages selecting up to k species
+            + lam
+            * (1 - 2 * k)  # Count constraint: encourages selecting up to k species
         )
 
     return q, species_keys
@@ -371,7 +375,9 @@ def print_solution(eval_result: dict) -> None:
     r = eval_result
     status = "YES" if r["constraint_satisfied"] else "NO"
     print(f"Energy: {r['energy']:.4f}")
-    print(f"Selected ({r['n_selected']}/{r['target_species']}): {', '.join(r['selected_species'])}")
+    print(
+        f"Selected ({r['n_selected']}/{r['target_species']}): {', '.join(r['selected_species'])}"
+    )
     print(f"Constraint satisfied: {status}")
     print(f"LER score: {r['ler_score']:.4f}")
     print(f"N-balance score: {r['n_balance_score']:.4f}")

@@ -11,7 +11,6 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from polyculture_qubo.analysis.landscape import LandscapeMetrics
 from polyculture_qubo.analysis.sensitivity import MaskingResult, WeightSweepResult
 
 # Default output directory
@@ -42,11 +41,18 @@ def plot_energy_histogram(
     fig, ax = plt.subplots(figsize=(8, 5))
 
     ax.hist(all_energies, bins=50, color="steelblue", alpha=0.7, edgecolor="white")
-    ax.axvline(best_energy, color="red", linewidth=2, linestyle="--",
-               label=f"Optimum: {best_energy:.2f}")
+    ax.axvline(
+        best_energy,
+        color="red",
+        linewidth=2,
+        linestyle="--",
+        label=f"Optimum: {best_energy:.2f}",
+    )
     ax.set_xlabel("QUBO Energy")
     ax.set_ylabel("Count")
-    ax.set_title(f"Energy Distribution — All C(20,{k}) = {len(all_energies)} Feasible Solutions")
+    ax.set_title(
+        f"Energy Distribution — All C(20,{k}) = {len(all_energies)} Feasible Solutions"
+    )
     ax.legend()
 
     return _save(fig, f"energy_histogram_k{k}", output_dir)
@@ -72,8 +78,13 @@ def plot_objective_decomposition(
 
     # Left: total energy
     ax1.hist(all_energies, bins=50, color="steelblue", alpha=0.7, edgecolor="white")
-    ax1.axvline(np.min(all_energies), color="red", linewidth=2, linestyle="--",
-                label=f"Optimum: {np.min(all_energies):.2f}")
+    ax1.axvline(
+        np.min(all_energies),
+        color="red",
+        linewidth=2,
+        linestyle="--",
+        label=f"Optimum: {np.min(all_energies):.2f}",
+    )
     ax1.set_xlabel("Total QUBO Energy")
     ax1.set_ylabel("Count")
     ax1.set_title("Total Energy (penalty + objective)")
@@ -81,8 +92,13 @@ def plot_objective_decomposition(
 
     # Right: objective only
     ax2.hist(obj_energies, bins=50, color="#e67e22", alpha=0.7, edgecolor="white")
-    ax2.axvline(np.min(obj_energies), color="red", linewidth=2, linestyle="--",
-                label=f"Optimum: {np.min(obj_energies):.2f}")
+    ax2.axvline(
+        np.min(obj_energies),
+        color="red",
+        linewidth=2,
+        linestyle="--",
+        label=f"Optimum: {np.min(obj_energies):.2f}",
+    )
     ax2.set_xlabel("Objective Energy (penalty subtracted)")
     ax2.set_ylabel("Count")
     ax2.set_title("Agronomic Signal Only")
@@ -94,7 +110,8 @@ def plot_objective_decomposition(
         f"Energy Decomposition — k={k}\n"
         f"Total range: {total_range:.2f} | Objective range: {obj_range:.2f} | "
         f"Penalty offset: {penalty_offset:.2f}",
-        fontsize=12, fontweight="bold",
+        fontsize=12,
+        fontweight="bold",
     )
     fig.tight_layout()
 
@@ -117,8 +134,14 @@ def plot_gap_structure(
     indices = np.arange(n)
 
     ax.plot(indices, sorted_energies, "o-", color="steelblue", markersize=4)
-    ax.axhline(sorted_energies[0], color="red", linewidth=1, linestyle=":",
-               alpha=0.5, label=f"Ground state: {sorted_energies[0]:.4f}")
+    ax.axhline(
+        sorted_energies[0],
+        color="red",
+        linewidth=1,
+        linestyle=":",
+        alpha=0.5,
+        label=f"Ground state: {sorted_energies[0]:.4f}",
+    )
 
     if n > 1:
         gap = sorted_energies[1] - sorted_energies[0]
@@ -127,7 +150,8 @@ def plot_gap_structure(
             xy=(1, sorted_energies[1]),
             xytext=(3, sorted_energies[1] + 0.05),
             arrowprops=dict(arrowstyle="->", color="red"),
-            fontsize=10, color="red",
+            fontsize=10,
+            color="red",
         )
 
     ax.set_xlabel("Energy Level Index")
@@ -214,8 +238,10 @@ def plot_sensitivity_heatmap(
         xticklabels=[sp.replace("_", " ").title() for sp in all_species],
         yticklabels=bin_labels,
         cmap="YlOrRd",
-        vmin=0, vmax=1,
-        annot=True, fmt=".0%",
+        vmin=0,
+        vmax=1,
+        annot=True,
+        fmt=".0%",
         ax=ax,
     )
     ax.set_title("Species Selection Frequency by LER Weight (α)")
@@ -249,7 +275,7 @@ def plot_interaction_network(
 
     # Add edges for non-trivial interactions
     for i, sp_a in enumerate(species):
-        for sp_b in species[i + 1:]:
+        for sp_b in species[i + 1 :]:
             j_val = j_matrix.loc[sp_a, sp_b]
             if abs(j_val) > 0.02:  # Skip near-zero (prior-only) edges
                 G.add_edge(sp_a, sp_b, weight=j_val)
@@ -260,7 +286,9 @@ def plot_interaction_network(
     selected_set = set(selected_species)
     node_colors = ["#2ecc71" if n in selected_set else "#bdc3c7" for n in G.nodes()]
     node_sizes = [800 if n in selected_set else 300 for n in G.nodes()]
-    node_edge_colors = ["#27ae60" if n in selected_set else "#95a5a6" for n in G.nodes()]
+    node_edge_colors = [
+        "#27ae60" if n in selected_set else "#95a5a6" for n in G.nodes()
+    ]
     node_linewidths = [3 if n in selected_set else 1 for n in G.nodes()]
 
     # Edge styling
@@ -274,18 +302,28 @@ def plot_interaction_network(
             edge_colors.append("#e74c3c")
         edge_widths.append(min(abs(w) * 10, 4))
 
-    nx.draw_networkx_edges(G, pos, edge_color=edge_colors, width=edge_widths, alpha=0.5, ax=ax)
+    nx.draw_networkx_edges(
+        G, pos, edge_color=edge_colors, width=edge_widths, alpha=0.5, ax=ax
+    )
     nx.draw_networkx_nodes(
-        G, pos, node_color=node_colors, node_size=node_sizes,
-        edgecolors=node_edge_colors, linewidths=node_linewidths, ax=ax,
+        G,
+        pos,
+        node_color=node_colors,
+        node_size=node_sizes,
+        edgecolors=node_edge_colors,
+        linewidths=node_linewidths,
+        ax=ax,
     )
 
     # Labels
     labels = {sp: sp.replace("_", " ").title() for sp in G.nodes()}
     nx.draw_networkx_labels(G, pos, labels, font_size=8, font_weight="bold", ax=ax)
 
-    ax.set_title("Species Interaction Network\n(green = complementary, red = competitive, "
-                 "highlighted = selected)", fontsize=12)
+    ax.set_title(
+        "Species Interaction Network\n(green = complementary, red = competitive, "
+        "highlighted = selected)",
+        fontsize=12,
+    )
     ax.axis("off")
 
     return _save(fig, "interaction_network", output_dir)
@@ -312,11 +350,13 @@ def plot_data_coverage(
 
     colors = ["#e74c3c" if c else "#3498db" for c in changed]
 
-    bars = ax.barh(range(len(pair_names)), j_values, color=colors, edgecolor="white")
+    ax.barh(range(len(pair_names)), j_values, color=colors, edgecolor="white")
     ax.set_yticks(range(len(pair_names)))
     ax.set_yticklabels([p.replace("_", " ") for p in pair_names], fontsize=7)
     ax.set_xlabel("Interaction Coefficient (J)")
-    ax.set_title("Data Coverage Analysis\n(red = removal changes solution, blue = stable)")
+    ax.set_title(
+        "Data Coverage Analysis\n(red = removal changes solution, blue = stable)"
+    )
     ax.invert_yaxis()
 
     # Add LER annotations
@@ -326,7 +366,8 @@ def plot_data_coverage(
             xy=(r.masked_j, i),
             xytext=(5, 0),
             textcoords="offset points",
-            fontsize=7, va="center",
+            fontsize=7,
+            va="center",
         )
 
     return _save(fig, "data_coverage", output_dir)

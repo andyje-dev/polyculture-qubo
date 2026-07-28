@@ -9,20 +9,33 @@ A quantum-computational framework for optimizing polyculture species selection i
 uv sync
 
 # Run the preprocessing pipeline (builds interaction matrices from raw data)
-python -m polyculture_qubo.pipeline
+uv run python -m polyculture_qubo.pipeline
 
 # Benchmark all solvers on the real problem
-python -m polyculture_qubo.solvers.benchmark --k 4
+uv run python -m polyculture_qubo.solvers.benchmark --k 4
 
 # Run the full analysis (landscape, validation, sensitivity, scalability)
-python -m polyculture_qubo.analysis.run
+uv run python -m polyculture_qubo.analysis.run
 
 # Include QAOA in the analysis (slower)
-python -m polyculture_qubo.analysis.run --with-qaoa --qaoa-depths 1 2
+uv run python -m polyculture_qubo.analysis.run --with-qaoa --qaoa-depths 1 2
 
 # Run tests
-python -m pytest tests/ -v
+uv run pytest tests/ -v
 ```
+
+## Development
+
+```bash
+# Install git hooks (ruff format + lint + ty on commit, gitleaks + pytest on push)
+uv run lefthook install
+
+# The hooks require gitleaks on PATH
+brew install gitleaks
+```
+
+Run `uv run ruff format .`, `uv run ruff check .`, and `uv run ty check src tests scripts`
+to reproduce the pre-commit checks across the whole tree.
 
 ## Project Structure
 

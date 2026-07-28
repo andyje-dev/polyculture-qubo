@@ -134,9 +134,7 @@ def _count_species_with_data(ler_stats: pd.DataFrame) -> int:
     return len(all_species)
 
 
-def _print_top_interactions(
-    j_matrix: pd.DataFrame, confidence: pd.DataFrame
-) -> None:
+def _print_top_interactions(j_matrix: pd.DataFrame, confidence: pd.DataFrame) -> None:
     species = j_matrix.index.tolist()
     n = len(species)
 

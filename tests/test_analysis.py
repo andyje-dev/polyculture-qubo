@@ -5,7 +5,6 @@ import pandas as pd
 import pytest
 
 from polyculture_qubo.analysis.landscape import (
-    LandscapeMetrics,
     analyze_landscape,
     frustration_analysis,
 )
@@ -15,12 +14,9 @@ from polyculture_qubo.analysis.sensitivity import (
     analyze_weight_sweep,
 )
 from polyculture_qubo.analysis.validation import (
-    pairwise_contribution_table,
     pairwise_ranking_check,
 )
-from polyculture_qubo.matrix.qubo import qubo_energy
 from polyculture_qubo.solvers.exact import ExactSolver
-from polyculture_qubo.solvers.result import SolverResult
 
 
 # --- Helpers ---
@@ -115,7 +111,7 @@ class TestLandscapeAnalysis:
         metrics = analyze_landscape(exact, q, penalty_strength=lam)
 
         # Penalty offset should be -k²λ
-        assert metrics.penalty_offset == pytest.approx(-(k ** 2) * lam)
+        assert metrics.penalty_offset == pytest.approx(-(k**2) * lam)
 
         # Objective range should equal total range (constant offset doesn't change range)
         total_range = metrics.worst_energy - metrics.best_energy
@@ -147,7 +143,7 @@ class TestFrustrationAnalysis:
         species = ["sp_a", "sp_b", "sp_c", "sp_d"]
         j_data = np.zeros((4, 4))
         j_data[0, 1] = -0.1  # Competitive
-        j_data[0, 2] = 0.3   # Complementary
+        j_data[0, 2] = 0.3  # Complementary
         j_matrix = pd.DataFrame(j_data, index=species, columns=species)
 
         # Solution selects species 0 and 1 (the competitive pair)
@@ -162,7 +158,7 @@ class TestFrustrationAnalysis:
     def test_identifies_split_complementary_pairs(self):
         species = ["sp_a", "sp_b", "sp_c", "sp_d"]
         j_data = np.zeros((4, 4))
-        j_data[0, 2] = 0.3   # Complementary but split
+        j_data[0, 2] = 0.3  # Complementary but split
         j_matrix = pd.DataFrame(j_data, index=species, columns=species)
 
         x = np.array([1, 1, 0, 0])  # sp_a selected, sp_c not
@@ -211,11 +207,13 @@ class TestWeightSweepAnalysis:
 class TestPairwiseRanking:
     def test_high_ler_pairs_rank_well(self):
         """Selected pairs with high LER should have high percentile rank."""
-        ler_stats = pd.DataFrame({
-            "species_a": ["a", "b", "c", "d"],
-            "species_b": ["b", "c", "d", "e"],
-            "ler_mean": [1.8, 1.5, 1.2, 0.9],
-        })
+        ler_stats = pd.DataFrame(
+            {
+                "species_a": ["a", "b", "c", "d"],
+                "species_b": ["b", "c", "d", "e"],
+                "ler_mean": [1.8, 1.5, 1.2, 0.9],
+            }
+        )
 
         # Select species that include the top LER pair
         selected = ["a", "b", "c"]
@@ -227,11 +225,13 @@ class TestPairwiseRanking:
 
     def test_no_observed_pairs(self):
         """Should handle case where no selected pairs have LER data."""
-        ler_stats = pd.DataFrame({
-            "species_a": ["a"],
-            "species_b": ["b"],
-            "ler_mean": [1.5],
-        })
+        ler_stats = pd.DataFrame(
+            {
+                "species_a": ["a"],
+                "species_b": ["b"],
+                "ler_mean": [1.5],
+            }
+        )
 
         selected = ["c", "d"]
 

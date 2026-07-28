@@ -115,7 +115,7 @@ def analyze_landscape(
     #   penalty_offset = k * λ(1-2k) + C(k,2) * 2λ = -k²λ
     # Subtracting this reveals the agronomic signal alone.
     if penalty_strength is not None:
-        penalty_offset = -(k ** 2) * penalty_strength
+        penalty_offset = -(k**2) * penalty_strength
         obj_energies = energies - penalty_offset
         obj_sorted = np.sort(obj_energies)
         obj_best = obj_sorted[0]
@@ -252,32 +252,35 @@ def frustration_analysis(
 def print_landscape_metrics(metrics: LandscapeMetrics) -> None:
     """Print a human-readable summary of landscape metrics."""
     m = metrics
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  ENERGY LANDSCAPE — k = {m.k}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"  Total feasible solutions: {m.n_solutions}")
     print(f"  Energy range: [{m.best_energy:.4f}, {m.worst_energy:.4f}]")
     print(f"  Mean ± std: {m.mean_energy:.4f} ± {m.std_energy:.4f}")
     print(f"  Skewness: {m.skewness:.4f}, Kurtosis: {m.kurtosis:.4f}")
     print(f"\n  Spectral gap (E1 - E0): {m.spectral_gap:.6f}")
     print(f"  Gap ratio (gap / range): {m.gap_ratio:.6f}")
-    print(f"\n  Degeneracy (total energy):")
+    print("\n  Degeneracy (total energy):")
     print(f"    Within 1% of optimum: {m.n_within_1pct}/{m.n_solutions}")
     print(f"    Within 5% of optimum: {m.n_within_5pct}/{m.n_solutions}")
     print(f"    Within 10% of optimum: {m.n_within_10pct}/{m.n_solutions}")
-    print(f"\n  Local minima: {m.n_local_minima}/{m.n_solutions} "
-          f"({m.local_minima_fraction:.1%})")
+    print(
+        f"\n  Local minima: {m.n_local_minima}/{m.n_solutions} "
+        f"({m.local_minima_fraction:.1%})"
+    )
 
     if m.penalty_offset != 0:
-        print(f"\n  --- Objective-Only Decomposition (penalty subtracted) ---")
+        print("\n  --- Objective-Only Decomposition (penalty subtracted) ---")
         print(f"  Penalty offset (constant for all feasible): {m.penalty_offset:.4f}")
         print(f"  Objective range: [{m.obj_best:.4f}, {m.obj_worst:.4f}]")
         print(f"  Objective mean ± std: {m.obj_mean:.4f} ± {m.obj_std:.4f}")
         print(f"  Objective spectral gap: {m.obj_spectral_gap:.6f}")
-        total_range_pct = (m.obj_range / abs(m.penalty_offset) * 100
-                           if m.penalty_offset != 0 else 0)
+        total_range_pct = (
+            m.obj_range / abs(m.penalty_offset) * 100 if m.penalty_offset != 0 else 0
+        )
         print(f"  Objective range as % of penalty: {total_range_pct:.2f}%")
-        print(f"  Degeneracy (objective only):")
+        print("  Degeneracy (objective only):")
         print(f"    Within 1% of optimum: {m.obj_n_within_1pct}/{m.n_solutions}")
         print(f"    Within 5% of optimum: {m.obj_n_within_5pct}/{m.n_solutions}")
         print(f"    Within 10% of optimum: {m.obj_n_within_10pct}/{m.n_solutions}")

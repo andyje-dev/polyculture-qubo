@@ -74,13 +74,17 @@ def main() -> None:
     print()
     companion_path = DATA_DIR / "companion_plants.csv"
     if companion_path.exists():
-        print(f"=== Companion Plants dataset already present ===")
+        print("=== Companion Plants dataset already present ===")
     else:
         print("=== Companion Plants dataset (manual step) ===")
-        print("  Download from: https://www.kaggle.com/datasets/aramacus/companion-plants")
+        print(
+            "  Download from: https://www.kaggle.com/datasets/aramacus/companion-plants"
+        )
         print(f"  Extract CSV to: {companion_path}")
         print("  Or use Kaggle CLI:")
-        print(f"    kaggle datasets download -d aramacus/companion-plants -p {DATA_DIR} --unzip")
+        print(
+            f"    kaggle datasets download -d aramacus/companion-plants -p {DATA_DIR} --unzip"
+        )
 
     if all_ok:
         print("\nDone. Run preprocessing next.")

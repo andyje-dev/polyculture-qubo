@@ -1,6 +1,9 @@
 """Data loading, cleaning, and filtering."""
 
-from polyculture_qubo.data.filter import filter_species_by_coverage, print_coverage_report
+from polyculture_qubo.data.filter import (
+    filter_species_by_coverage,
+    print_coverage_report,
+)
 from polyculture_qubo.data.loader import (
     DATA_DIR,
     PROCESSED_DIR,
