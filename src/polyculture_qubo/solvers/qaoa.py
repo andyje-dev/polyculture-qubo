@@ -18,6 +18,7 @@ difficulty. For this 20-qubit problem on a simulator, p=1 to p=5 is tractable.
 import logging
 import time
 from dataclasses import dataclass
+from math import comb
 
 import numpy as np
 from qiskit import QuantumCircuit
@@ -118,6 +119,8 @@ class QAOASolver:
         best_feasible_energy = float("inf")
         best_feasible_solution = None
         all_energies = []
+        in_constraint_shots = 0
+        total_shots = 0
 
         from polyculture_qubo.matrix.qubo import qubo_energy
 
@@ -126,14 +129,17 @@ class QAOASolver:
             x = np.array([int(b) for b in reversed(bitstring)], dtype=int)
             energy = qubo_energy(q, x)
             all_energies.extend([energy] * count)
+            total_shots += count
 
             if energy < best_energy:
                 best_energy = energy
                 best_solution = x
 
-            if np.sum(x) == target_species and energy < best_feasible_energy:
-                best_feasible_energy = energy
-                best_feasible_solution = x
+            if np.sum(x) == target_species:
+                in_constraint_shots += count
+                if energy < best_feasible_energy:
+                    best_feasible_energy = energy
+                    best_feasible_solution = x
 
         # Prefer feasible solution
         if best_feasible_solution is not None:
@@ -168,6 +174,22 @@ class QAOASolver:
                 "scale_factor": scale,
                 "feasible_solution_found": feasible,
                 "num_unique_samples": len(counts),
+                # In-constraint (Hamming weight == k) sampling statistics.
+                # The transverse-field mixer explores all 2^N states, so the
+                # share of shots landing in the feasible subspace measures how
+                # much of the constraint structure the circuit actually learned.
+                # Compare against uniform_in_constraint_probability = C(n,k)/2^n.
+                "in_constraint_shots": in_constraint_shots,
+                "total_shots": total_shots,
+                "in_constraint_probability": (
+                    in_constraint_shots / total_shots if total_shots else 0.0
+                ),
+                "uniform_in_constraint_probability": float(
+                    comb(n, target_species) / 2**n
+                ),
+                "mean_sampled_energy": (
+                    float(np.mean(all_energies)) if all_energies else float("nan")
+                ),
             },
         )
 

@@ -35,21 +35,28 @@ class ScalabilityMetrics:
     condition_numbers: list[float]
     penalty_to_objective_ratios: list[float]
 
-    # QAOA performance (if available)
-    qaoa_approx_ratios: dict[int, dict[int, float]]  # k -> {depth -> ratio}
+    # QAOA performance (if available).
+    # beta is the primary quality metric: 1 = optimal, 0 = no better than a
+    # random feasible draw, < 0 = worse than random. It is invariant under
+    # adding a constant to the energy, unlike the raw E_alg/E_opt ratio.
+    qaoa_beta: dict[int, dict[int, float]]  # k -> {depth -> beta}
+    # rank is None when the feasible set is too large to enumerate.
+    qaoa_rank: dict[int, dict[int, tuple[int | None, int | None]]]
 
 
 def compute_scalability_metrics(
     landscape_metrics: dict[int, LandscapeMetrics],
     q_matrices: dict[int, np.ndarray],
-    qaoa_results: dict[int, dict[int, float]] | None = None,
+    qaoa_beta: dict[int, dict[int, float]] | None = None,
+    qaoa_rank: dict[int, dict[int, tuple[int | None, int | None]]] | None = None,
 ) -> ScalabilityMetrics:
     """Compute scalability metrics from landscape characterizations.
 
     Args:
         landscape_metrics: Dict mapping k -> LandscapeMetrics.
         q_matrices: Dict mapping k -> Q matrix (for condition number).
-        qaoa_results: Optional dict mapping k -> {depth -> approx_ratio}.
+        qaoa_beta: Optional dict mapping k -> {depth -> beta}.
+        qaoa_rank: Optional dict mapping k -> {depth -> (rank, n_feasible)}.
 
     Returns:
         ScalabilityMetrics summarizing scaling behavior.
@@ -111,7 +118,8 @@ def compute_scalability_metrics(
         energy_stds=stds,
         condition_numbers=cond_nums,
         penalty_to_objective_ratios=penalty_ratios,
-        qaoa_approx_ratios=qaoa_results or {},
+        qaoa_beta=qaoa_beta or {},
+        qaoa_rank=qaoa_rank or {},
     )
 
 
@@ -163,29 +171,56 @@ def print_scalability_summary(metrics: ScalabilityMetrics) -> None:
             )
 
     # QAOA results
-    if m.qaoa_approx_ratios:
-        print("\n  QAOA Approximation Ratios:")
-        depths = sorted(
-            set(d for ratios in m.qaoa_approx_ratios.values() for d in ratios)
-        )
-        header = f"  {'k':>3}" + "".join(f"  {'p=' + str(d):>8}" for d in depths)
+    if m.qaoa_beta:
+        print("\n  QAOA quality — β (1 = optimal, 0 = random feasible draw):")
+        depths = sorted(set(d for betas in m.qaoa_beta.values() for d in betas))
+        header = f"  {'k':>3}" + "".join(f"  {'p=' + str(d):>10}" for d in depths)
         print(header)
         for k in m.k_values:
-            if k in m.qaoa_approx_ratios:
+            if k in m.qaoa_beta:
                 row = f"  {k:>3}"
                 for d in depths:
-                    if d in m.qaoa_approx_ratios[k]:
-                        row += f"  {m.qaoa_approx_ratios[k][d]:>8.4f}"
+                    if d in m.qaoa_beta[k]:
+                        row += f"  {m.qaoa_beta[k][d]:>+10.4f}"
                     else:
-                        row += f"  {'—':>8}"
+                        row += f"  {'—':>10}"
                 print(row)
+
+        if m.qaoa_rank:
+            print("\n  QAOA rank among feasible solutions (1 = optimal):")
+            print(header)
+            for k in m.k_values:
+                if k in m.qaoa_rank:
+                    row = f"  {k:>3}"
+                    for d in depths:
+                        if d in m.qaoa_rank[k]:
+                            rank, n_feas = m.qaoa_rank[k][d]
+                            cell = "—" if rank is None else f"{rank}/{n_feas}"
+                            row += f"  {cell:>10}"
+                        else:
+                            row += f"  {'—':>10}"
+                    print(row)
 
     print("\n  Quantum advantage assessment:")
     print(f"    At N={m.n_species}, brute force enumerates all solutions in <1s.")
     print("    Classical solvers (SA) find exact optimum reliably.")
-    if all(
-        r > 0.99 for ratios in m.qaoa_approx_ratios.values() for r in ratios.values()
-    ):
-        print("    QAOA achieves >99% approximation — problem is easy for all methods.")
+    # Guard on non-empty results: all() over an empty generator returns True,
+    # which previously printed a QAOA verdict even when QAOA never ran.
+    all_betas = [b for betas in m.qaoa_beta.values() for b in betas.values()]
+    if all_betas:
+        worst = min(all_betas)
+        best = max(all_betas)
+        if worst > 0.99:
+            print("    QAOA reaches near-optimal quality at every k and depth tested.")
+        elif worst < 0.0:
+            print(
+                f"    QAOA quality is unstable across k and depth "
+                f"(β ranges {worst:+.3f} to {best:+.3f}); at least one "
+                f"configuration is worse than a random feasible draw."
+            )
+        else:
+            print(f"    QAOA β ranges {worst:+.3f} to {best:+.3f} across k and depth.")
+    else:
+        print("    QAOA not run — no quantum quality data for this instance.")
     print(f"    Quantum advantage would require N >> {m.n_species} with maintained")
     print("    problem structure (small gap, high degeneracy, frustrated couplings).")

@@ -301,17 +301,49 @@ We cannot validate full polyculture recommendations (no ground-truth multi-speci
 - ✅ QAOA implementation using Qiskit Aer simulator (RZZ/RZ cost unitaries, COBYLA optimizer, configurable depth p=1–5)
 - ✅ Unified `SolverResult` dataclass across all solvers
 - ✅ Benchmark runner: `python -m polyculture_qubo.solvers.benchmark`
-- ✅ Sweep k ∈ {3, 4, 5} — all solvers find agronomically plausible cereal-legume polycultures
-- ✅ 22 solver tests (all passing)
+- ✅ Sweep k ∈ {3, 4, 5} — exact and SA find agronomically plausible cereal-legume polycultures at every k
+- ✅ Offset-invariant quality metrics (`solvers/metrics.py`): β and rank
+- ✅ 22 solver tests + 23 metric tests (all passing)
 
 #### Solver Results Summary
-| k | Optimal Polyculture | SA matches exact | QAOA p=1 approx ratio |
-|---|---------------------|------------------|-----------------------|
-| 3 | Common bean, Maize, Pepper | Yes | 99.8% |
-| 4 | Common bean, Maize, Pea, Pepper | Yes | 99.8% |
-| 5 | Common bean, Maize, Pea, Pepper, Sunflower | Yes | 99.8% |
+Quality is β (1 = optimal, 0 = no better than a random feasible draw, < 0 = worse),
+with rank among the C(20,k) feasible solutions. The old `E_alg / E_opt` ratio is
+not reported: its floor over the entire feasible set is 0.974 at k=4, so it rates
+even the worst possible answer at 97%. See "QAOA measurement" below.
+
+| k | Optimal Polyculture | SA matches exact | QAOA best β (depth) |
+|---|---------------------|------------------|---------------------|
+| 3 | Common bean, Maize, Pepper | Yes | +1.000 (p=2); **-0.525 at p=1** |
+| 4 | Common bean, Maize, Pea, Pepper | Yes | +1.000 (p=3) |
+| 5 | Common bean, Maize, Pea, Pepper, Sunflower | Yes | +1.000 (p=1) |
+
+Full k × p grid of β (rank in parentheses):
+
+| k | p=1 | p=2 | p=3 |
+|---|-----|-----|-----|
+| 3 | -0.525 (1067/1140) | +1.000 (1/1140) | +0.643 (12/1140) |
+| 4 | +0.842 (5/4845) | +0.849 (4/4845) | +1.000 (1/4845) |
+| 5 | +1.000 (1/15504) | +0.775 (47/15504) | +0.867 (12/15504) |
 
 ### Phase 3 Implementation Notes
+
+#### QAOA measurement: why the approximation ratio was replaced
+The cardinality penalty contributes a constant −k²λ to every feasible solution
+(96.4% of the total energy magnitude at k=4). Any metric shaped like
+`E_alg / E_opt` inherits that constant and compresses toward 1, so it reports
+near-optimality almost regardless of the answer found. `solvers/metrics.py`
+provides offset-invariant replacements: β (relative to a random feasible draw,
+sampled so it stays computable when enumeration is impossible) and exact rank.
+`QAOASolver` also records `in_constraint_probability` — the share of shots with
+Hamming weight exactly k — which measures how much constraint structure the
+circuit learned. 8 of 9 (k, p) configurations beat uniform sampling by 5.7×–366×;
+(k=3, p=1) is *below* uniform at 0.4×, which is why its solution is worse than random.
+
+QAOA quality is **not monotone in circuit depth**. The variational objective is a
+4,096-shot sampled expectation handed to COBYLA, which assumes a deterministic
+objective, so outer-loop convergence — not circuit expressiveness — is the likely
+limiter. Do not claim "deeper circuits are needed" without re-running against an
+exact statevector expectation or SPSA.
 
 #### QAOA: Q Matrix Normalization and Ising Conversion
 The `normalize_qubo()` utility divides Q by its max absolute entry, putting all coefficients in [-1, 1]. The `qubo_to_ising()` utility converts to Ising spins s_i ∈ {-1,+1} via x_i = (1 - s_i)/2. Both are in `polyculture_qubo.matrix.qubo`.
@@ -329,7 +361,7 @@ Barley, wheat, and oat have near-zero pairwise diversity scores (same height, ro
 - ✅ Leave-one-out cross-validation (31 observed pairs)
 - ✅ Sensitivity analysis: weight sweep (120 configurations, 12 unique optimal solutions)
 - ✅ Data masking: 2 of 31 pairs are load-bearing (removing them changes the solution)
-- ✅ Scalability projection with QAOA approximation ratios
+- ✅ Scalability projection with QAOA β / rank quality metrics
 - ✅ 7 publication-quality figure types, saved to `output/figures/`
 - ✅ Unified analysis runner: `python -m polyculture_qubo.analysis.run`
 - ✅ 16 analysis tests (all passing)
@@ -339,7 +371,7 @@ Barley, wheat, and oat have near-zero pairwise diversity scores (same height, ro
 - **Solution is moderately sensitive to weights**: 12 distinct optimal solutions across 120 weight configurations. Maize appears in 88% of all configs (most robust selection).
 - **Two load-bearing data pairs**: removing maize+pea or common_bean+pepper flips the optimal solution.
 - **Spectral gap shrinks with k** (0.051 → 0.018), suggesting the problem gets harder at larger scale.
-- **No quantum advantage at N=20**: brute force solves in 7ms. QAOA achieves 99.8% approximation ratio but takes 28s.
+- **No quantum advantage at N=20**: brute force solves in 9ms. QAOA reaches the exact optimum in 3 of 9 (k, p) configurations but takes 29–67s, and is unreliable — at (k=3, p=1) it returns a worse-than-random solution (three cereals, no nitrogen fixer, no empirical LER data).
 
 ### Phase 5: Documentation & Output
 - Technical report / paper draft

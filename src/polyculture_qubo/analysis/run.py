@@ -12,24 +12,22 @@ Usage:
 
 import argparse
 
-import numpy as np
 import pandas as pd
 
 from polyculture_qubo.data import PROCESSED_DIR
-from polyculture_qubo.matrix.interaction import (
-    build_diversity_matrix,
-    build_interaction_matrix,
-    compute_linear_biases,
-)
 from polyculture_qubo.matrix.qubo import (
     QUBOConfig,
     build_qubo_matrix,
     compute_penalty_strength,
-    evaluate_solution,
     solution_to_species,
 )
 from polyculture_qubo.solvers.annealing import SimulatedAnnealingSolver
 from polyculture_qubo.solvers.exact import ExactSolver
+from polyculture_qubo.solvers.metrics import (
+    evaluate_quality,
+    format_quality,
+    random_baseline,
+)
 
 from polyculture_qubo.analysis.landscape import (
     analyze_landscape,
@@ -100,7 +98,10 @@ def run_analysis(
     landscape_metrics = {}
     q_matrices = {}
     solver_data = {}  # For solver comparison plot
-    qaoa_approx_ratios: dict[int, dict[int, float]] = {}
+    # Primary QAOA quality metric: beta, relative to a random feasible draw.
+    # 1 = optimal, 0 = no better than random, < 0 = worse than random.
+    qaoa_beta: dict[int, dict[int, float]] = {}
+    qaoa_rank: dict[int, dict[int, tuple[int | None, int | None]]] = {}
 
     # =========================================================
     # 1. ENERGY LANDSCAPE ANALYSIS
@@ -111,11 +112,15 @@ def run_analysis(
 
     for k in k_values:
         config = QUBOConfig(target_species=k)
-        q, species_keys = build_qubo_matrix(j_matrix, d_matrix, b_matrix, config, c_matrix)
+        q, species_keys = build_qubo_matrix(
+            j_matrix, d_matrix, b_matrix, config, c_matrix
+        )
         q_matrices[k] = q
 
         # Compute λ for penalty decomposition
-        lam = compute_penalty_strength(j_matrix, d_matrix, b_matrix, config, species_keys)
+        lam = compute_penalty_strength(
+            j_matrix, d_matrix, b_matrix, config, species_keys
+        )
 
         # Exact solve to get full landscape
         exact = ExactSolver().solve(q, target_species=k)
@@ -147,46 +152,71 @@ def run_analysis(
             "energy": sa.best_energy,
             "time": sa.wall_time_seconds,
         }
-        sa_ratio = sa.best_energy / exact.best_energy if exact.best_energy != 0 else float("nan")
-        print(f"\n  SA: energy={sa.best_energy:.4f}, time={sa.wall_time_seconds:.3f}s, "
-              f"ratio={sa_ratio:.6f}")
+        baseline = random_baseline(q, target_species=k, seed=42)
+        sa_quality = evaluate_quality(
+            q,
+            target_species=k,
+            energy=sa.best_energy,
+            reference_energy=exact.best_energy,
+            baseline=baseline,
+            all_feasible_energies=exact.all_energies,
+            penalty_offset=metrics.penalty_offset,
+        )
+        print(
+            f"\n  SA: energy={sa.best_energy:.4f}, time={sa.wall_time_seconds:.3f}s, "
+            f"{format_quality(sa_quality)}"
+        )
 
         # QAOA benchmark (optional)
         if with_qaoa:
             from polyculture_qubo.solvers.qaoa import QAOAConfig, QAOASolver
 
-            qaoa_approx_ratios[k] = {}
+            qaoa_beta[k] = {}
+            qaoa_rank[k] = {}
             for p in qaoa_depths:
                 print(f"  QAOA p={p}: running...", end="", flush=True)
                 qaoa_config = QAOAConfig(
                     depth=p, num_restarts=5, max_iter=200, shots=4096, seed=42
                 )
                 qaoa = QAOASolver().solve(q, target_species=k, config=qaoa_config)
-                ratio = qaoa.best_energy / exact.best_energy if exact.best_energy != 0 else float("nan")
-                qaoa_approx_ratios[k][p] = ratio
+                quality = evaluate_quality(
+                    q,
+                    target_species=k,
+                    energy=qaoa.best_energy,
+                    reference_energy=exact.best_energy,
+                    baseline=baseline,
+                    all_feasible_energies=exact.all_energies,
+                    penalty_offset=metrics.penalty_offset,
+                )
+                qaoa_beta[k][p] = quality.beta
+                qaoa_rank[k][p] = (quality.rank, quality.n_feasible)
 
                 solver_data[f"QAOA p={p} (k={k})"] = {
                     "energy": qaoa.best_energy,
                     "time": qaoa.wall_time_seconds,
                 }
-                print(f" energy={qaoa.best_energy:.4f}, time={qaoa.wall_time_seconds:.1f}s, "
-                      f"ratio={ratio:.4f}, "
-                      f"feasible={qaoa.metadata['feasible_solution_found']}")
+                p_in = qaoa.metadata["in_constraint_probability"]
+                p_uni = qaoa.metadata["uniform_in_constraint_probability"]
+                print(
+                    f" energy={qaoa.best_energy:.4f}, time={qaoa.wall_time_seconds:.1f}s, "
+                    f"{format_quality(quality)}, "
+                    f"P_in={p_in:.4f} (uniform {p_uni:.5f}), "
+                    f"feasible={qaoa.metadata['feasible_solution_found']}"
+                )
 
         # Frustration analysis (for the primary k)
         if k == 4:
-            selected = solution_to_species(exact.best_solution, species_keys)
             frust = frustration_analysis(exact.best_solution, species_keys, j_matrix)
             print(f"\n  Frustration Analysis (k={k}):")
             if frust["selected_competitive"]:
-                print(f"    Competitive pairs forced together:")
+                print("    Competitive pairs forced together:")
                 for sp_a, sp_b, j_val in frust["selected_competitive"]:
                     print(f"      {sp_a} + {sp_b}: J = {j_val:.4f}")
             else:
-                print(f"    No competitive pairs in solution (good!)")
+                print("    No competitive pairs in solution (good!)")
 
             if frust["split_complementary"][:5]:
-                print(f"    Top complementary pairs split apart:")
+                print("    Top complementary pairs split apart:")
                 for sp_a, sp_b, j_val in frust["split_complementary"][:5]:
                     print(f"      {sp_a} + {sp_b}: J = {j_val:.4f}")
 
@@ -195,7 +225,9 @@ def run_analysis(
     # =========================================================
     print("\n")
     config_k4 = QUBOConfig(target_species=4)
-    q_k4, species_keys = build_qubo_matrix(j_matrix, d_matrix, b_matrix, config_k4, c_matrix)
+    q_k4, species_keys = build_qubo_matrix(
+        j_matrix, d_matrix, b_matrix, config_k4, c_matrix
+    )
     exact_k4 = ExactSolver().solve(q_k4, target_species=4, collect_all=False)
     selected_k4 = solution_to_species(exact_k4.best_solution, species_keys)
 
@@ -213,10 +245,15 @@ def run_analysis(
     bischoff = None
     if not skip_loo or not skip_sensitivity:
         from polyculture_qubo.data import load_companion_plants, load_bischoff_pairs
-        from polyculture_qubo.data.loader import aggregate_bischoff_pairs, filter_to_candidate_pairs
+        from polyculture_qubo.data.loader import (
+            aggregate_bischoff_pairs,
+            filter_to_candidate_pairs,
+        )
 
         companion = filter_to_candidate_pairs(load_companion_plants())
-        bischoff = aggregate_bischoff_pairs(filter_to_candidate_pairs(load_bischoff_pairs()))
+        bischoff = aggregate_bischoff_pairs(
+            filter_to_candidate_pairs(load_bischoff_pairs())
+        )
 
     if not skip_loo:
         loo_results = leave_one_out_cv(ler_stats, companion, bischoff, config_k4)
@@ -236,7 +273,9 @@ def run_analysis(
         )
         sweep_analysis = analyze_weight_sweep(sweep_results)
 
-        masking_results = data_masking_analysis(ler_stats, companion, bischoff, config_k4)
+        masking_results = data_masking_analysis(
+            ler_stats, companion, bischoff, config_k4
+        )
 
         print_sensitivity_summary(sweep_analysis, masking_results)
 
@@ -250,8 +289,10 @@ def run_analysis(
     # 4. SCALABILITY PROJECTION
     # =========================================================
     scalability = compute_scalability_metrics(
-        landscape_metrics, q_matrices,
-        qaoa_results=qaoa_approx_ratios if qaoa_approx_ratios else None,
+        landscape_metrics,
+        q_matrices,
+        qaoa_beta=qaoa_beta if qaoa_beta else None,
+        qaoa_rank=qaoa_rank if qaoa_rank else None,
     )
     print_scalability_summary(scalability)
 
@@ -267,23 +308,38 @@ def run_analysis(
     path = plot_solver_comparison(solver_data)
     print(f"  -> Saved: {path}")
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("  ANALYSIS COMPLETE")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Run Phase 4 analysis")
-    parser.add_argument("--k", type=int, nargs="+", default=[3, 4, 5],
-                        help="Target species counts (default: 3 4 5)")
-    parser.add_argument("--skip-sensitivity", action="store_true",
-                        help="Skip weight sweep and data masking")
-    parser.add_argument("--skip-loo", action="store_true",
-                        help="Skip leave-one-out cross-validation")
-    parser.add_argument("--with-qaoa", action="store_true",
-                        help="Include QAOA benchmark (slower)")
-    parser.add_argument("--qaoa-depths", type=int, nargs="+", default=[1, 2],
-                        help="QAOA circuit depths (default: 1 2)")
+    parser.add_argument(
+        "--k",
+        type=int,
+        nargs="+",
+        default=[3, 4, 5],
+        help="Target species counts (default: 3 4 5)",
+    )
+    parser.add_argument(
+        "--skip-sensitivity",
+        action="store_true",
+        help="Skip weight sweep and data masking",
+    )
+    parser.add_argument(
+        "--skip-loo", action="store_true", help="Skip leave-one-out cross-validation"
+    )
+    parser.add_argument(
+        "--with-qaoa", action="store_true", help="Include QAOA benchmark (slower)"
+    )
+    parser.add_argument(
+        "--qaoa-depths",
+        type=int,
+        nargs="+",
+        default=[1, 2],
+        help="QAOA circuit depths (default: 1 2)",
+    )
     args = parser.parse_args()
 
     run_analysis(

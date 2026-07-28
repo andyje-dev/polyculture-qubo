@@ -60,8 +60,10 @@ The k=4 optimal solution is **common bean + maize + pea + pepper** -- a cereal-l
 
 ## Key Results
 
-- All three solvers find the same optimum. SA matches exact; QAOA achieves 99.8% approximation ratio.
+- Exact enumeration and simulated annealing find the same optimum at every k. QAOA reaches it in 3 of 9 depth-by-target configurations, and at (k=3, p=1) returns a solution worse than a random feasible draw.
 - The energy landscape appears flat in total energy (100% of solutions within 5% of optimum) but has real structure when the constant penalty offset is subtracted (only 0.04% within 5% of the objective-only optimum).
+- The same penalty offset invalidates the conventional approximation ratio: its floor over the whole feasible set is 0.974 at k=4, so the worst possible answer still scores 97%. Solver quality is reported as β (1 = optimal, 0 = random feasible draw) and rank instead.
+- QAOA concentrates 5.7x-366x more probability in the feasible subspace than uniform sampling in 8 of 9 configurations, using a standard transverse-field mixer.
 - 12 distinct optimal solutions emerge across 120 weight configurations. Maize appears in 88% of all configs.
 - No quantum advantage at N=20 (brute force solves in 7ms). The spectral gap shrinks with k, suggesting harder structure at larger scale.
 
